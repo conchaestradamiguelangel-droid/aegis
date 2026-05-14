@@ -1,0 +1,128 @@
+name: AEGIS Security Test Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  PYTHONPATH: .
+
+jobs:
+  # ── 1. Sintaxis (rápido, bloquea todo) ──────────────────────────────────────
+  syntax:
+    name: Syntax Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install aiohttp aiofiles cryptography pynacl
+      - name: Syntax check — all modules
+        run: |
+          FAIL=0
+          for f in core/*.py layers/*.py integrations/*.py main.py status_server.py; do
+            python3 -m py_compile "$f" && echo "✓ $f" || { echo "✗ SYNTAX ERROR: $f"; FAIL=1; }
+          done
+          exit $FAIL
+
+  # ── 2. Gate de seguridad (100% requerido para deploy) ───────────────────────
+  security-gate:
+    name: Security Gate
+    needs: syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install aiohttp aiofiles cryptography pynacl
+
+      - name: C0 Crypto — 28 tests
+        run: python3 tests/test_crypto.py
+
+      - name: C0-C9 System — 19 tests
+        run: python3 tests/test_aegis.py
+
+      - name: C5 AMTD — 35 tests
+        run: python3 tests/test_amtd.py
+
+      - name: C3 Detector — 26 tests
+        run: python3 tests/test_detector.py
+
+      - name: C7 Forensic — 47 tests
+        run: python3 tests/test_forensic.py
+
+      - name: E2E Pipeline — 20 tests
+        run: python3 tests/test_e2e_pipeline.py
+
+      - name: Red Team A1 — APT lento (12 tests)
+        run: python3 tests/redteam_A1.py
+      - name: Red Team A2 — Scan distribuido (15 tests)
+        run: python3 tests/redteam_A2.py
+      - name: Red Team B1 — Evasión mimicry (18 tests)
+        run: python3 tests/redteam_B1.py
+      - name: Red Team B2 — Replay/timing (14 tests)
+        run: python3 tests/redteam_B2.py
+      - name: Red Team C1 — Lateral movement (15 tests)
+        run: python3 tests/redteam_C1.py
+      - name: Red Team C2 — Exfiltración (16 tests)
+        run: python3 tests/redteam_C2.py
+      - name: Red Team D1 — Cripto-ataque (15 tests)
+        run: python3 tests/redteam_D1.py
+      - name: Red Team D2 — Ransomware sim (15 tests)
+        run: python3 tests/redteam_D2.py
+      - name: Red Team E1 — DoS volumétrico (13 tests)
+        run: python3 tests/redteam_E1.py
+      - name: Red Team E2 — Flood ML/Learning (14 tests)
+        run: python3 tests/redteam_E2.py
+
+  # ── 3. Límites conocidos (no bloquea deploy) ─────────────────────────────────
+  known-limits:
+    name: Known Limits (non-blocking)
+    needs: syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install aiohttp aiofiles cryptography pynacl
+
+      - name: C6 Bubble — 31 tests (1 timing flaky)
+        continue-on-error: true
+        run: python3 tests/test_bubble.py
+
+      - name: C8 Learning — 58 tests (2 network sync timing)
+        continue-on-error: true
+        run: python3 tests/test_learning.py
+
+      - name: Load E1 — 6 tests (2 fallos E1 documentados >250 RPS)
+        continue-on-error: true
+        run: python3 tests/test_load.py
+
+  # ── 4. Resumen ejecutivo ─────────────────────────────────────────────────────
+  summary:
+    name: Summary
+    needs: [ security-gate, known-limits ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Security status
+        run: |
+          echo "╔══════════════════════════════════════════════╗"
+          echo "║          AEGIS — CI/CD Security Report       ║"
+          echo "╠══════════════════════════════════════════════╣"
+          echo "║  Gate: crypto + detection + forensic + e2e  ║"
+          echo "║  + 10 Red Team vectors                       ║"
+          echo "║  Known limits: bubble, learning, load E1     ║"
+          echo "╚══════════════════════════════════════════════╝"

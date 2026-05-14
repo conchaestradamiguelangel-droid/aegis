@@ -1,0 +1,45 @@
+# Runtime state — never commit
+state/
+logs/
+*.log
+*.jsonl
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.env
+
+# One-off scripts (not canon)
+patch_*.py
+fix_*.py
+stress_*.py
+redteam_masivo*.py
+redteam_masivo_informe.html
+
+# Secrets
+.env
+.env.*
+secrets/
+*.pem
+*.key
+*.crt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
