@@ -503,6 +503,7 @@ class AegisSystem:
         ckpt = self._persistence.load_latest_checkpoint()
         if ckpt:
             logger.info(f"[AEGIS] Estado previo cargado desde checkpoint {ckpt.get('checkpoint_id','?')}")
+            self._restore_from_checkpoint(ckpt)
 
         logger.info(
             f"[AEGIS] ═══ SISTEMA ONLINE ═══ "
@@ -854,12 +855,37 @@ class AegisSystem:
         }
 
     async def _snapshot_for_checkpoint(self) -> dict:
-        """Snapshot ligero del sistema para checkpoint periódico."""
+        """Snapshot con estado restaurable: blocklist + lockdown + contadores."""
         try:
-            return self.full_status()
+            data = self.full_status()
+            if hasattr(self, "_mace_proxy") and self._mace_proxy is not None:
+                data["_restore"] = {
+                    "blocklist": self._mace_proxy.blocklist.to_checkpoint(),
+                    "lockdown_status": str(self.lockdown.aegis_status().get("status", "IDLE")),
+                    "total_detections": self.detector.status().get("total_detections", 0),
+                }
+            return data
         except Exception as e:
             logger.warning(f"[AEGIS] Error en snapshot: {e}")
             return {"error": str(e)}
+
+    def _restore_from_checkpoint(self, ckpt: dict):
+        """Restaura estado critico tras arranque: blocklist + alerta lockdown."""
+        restore = ckpt.get("data", {}).get("_restore")
+        if not restore:
+            return
+        restored = []
+        if hasattr(self, "_mace_proxy") and self._mace_proxy is not None:
+            blocked = restore.get("blocklist", [])
+            if blocked:
+                self._mace_proxy.blocklist.restore_from_checkpoint(blocked)
+                restored.append(f"blocklist={len(blocked)} IPs")
+        if restore.get("lockdown_status") == "LOCKED":
+            logger.warning("[AEGIS] Sistema estaba en LOCKDOWN -- requiere intervencion manual")
+            restored.append("lockdown_alert")
+        if restored:
+            logger.info(f"[AEGIS] Estado restaurado: {chr(44).join(restored)}")
+
 
     # ── Superficie de ataque — Mejora 6 ──────────────────────────────────────
 
