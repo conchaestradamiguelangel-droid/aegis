@@ -10,7 +10,7 @@ env:
   PYTHONPATH: .
 
 jobs:
-  # ── 1. Sintaxis (rápido, bloquea todo) ──────────────────────────────────────
+  # ── 1. Sintaxis ──────────────────────────────────────────────────────────────
   syntax:
     name: Syntax Check
     runs-on: ubuntu-latest
@@ -21,16 +21,19 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install aiohttp aiofiles cryptography pynacl
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build libssl-dev
+          pip install aiohttp aiofiles cryptography pynacl pqcrypto liboqs-python
       - name: Syntax check — all modules
         run: |
           FAIL=0
           for f in core/*.py layers/*.py integrations/*.py main.py status_server.py; do
-            python3 -m py_compile "$f" && echo "✓ $f" || { echo "✗ SYNTAX ERROR: $f"; FAIL=1; }
+            python3 -m py_compile  && echo ✓  || { echo ✗ SYNTAX ERROR: ; FAIL=1; }
           done
-          exit $FAIL
+          exit 
 
-  # ── 2. Gate de seguridad (100% requerido para deploy) ───────────────────────
+  # ── 2. Gate de seguridad ─────────────────────────────────────────────────────
   security-gate:
     name: Security Gate
     needs: syntax
@@ -42,26 +45,23 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install aiohttp aiofiles cryptography pynacl
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build libssl-dev
+          pip install aiohttp aiofiles cryptography pynacl pqcrypto liboqs-python
 
       - name: C0 Crypto — 28 tests
         run: python3 tests/test_crypto.py
-
       - name: C0-C9 System — 19 tests
         run: python3 tests/test_aegis.py
-
       - name: C5 AMTD — 35 tests
         run: python3 tests/test_amtd.py
-
       - name: C3 Detector — 26 tests
         run: python3 tests/test_detector.py
-
       - name: C7 Forensic — 47 tests
         run: python3 tests/test_forensic.py
-
       - name: E2E Pipeline — 20 tests
         run: python3 tests/test_e2e_pipeline.py
-
       - name: Red Team A1 — APT lento (12 tests)
         run: python3 tests/redteam_A1.py
       - name: Red Team A2 — Scan distribuido (15 tests)
@@ -96,21 +96,21 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install aiohttp aiofiles cryptography pynacl
-
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build libssl-dev
+          pip install aiohttp aiofiles cryptography pynacl pqcrypto liboqs-python
       - name: C6 Bubble — 31 tests (1 timing flaky)
         continue-on-error: true
         run: python3 tests/test_bubble.py
-
       - name: C8 Learning — 58 tests (2 network sync timing)
         continue-on-error: true
         run: python3 tests/test_learning.py
-
       - name: Load E1 — 6 tests (2 fallos E1 documentados >250 RPS)
         continue-on-error: true
         run: python3 tests/test_load.py
 
-  # ── 4. Resumen ejecutivo ─────────────────────────────────────────────────────
+  # ── 4. Resumen ───────────────────────────────────────────────────────────────
   summary:
     name: Summary
     needs: [ security-gate, known-limits ]
@@ -119,10 +119,10 @@ jobs:
     steps:
       - name: Security status
         run: |
-          echo "╔══════════════════════════════════════════════╗"
-          echo "║          AEGIS — CI/CD Security Report       ║"
-          echo "╠══════════════════════════════════════════════╣"
-          echo "║  Gate: crypto + detection + forensic + e2e  ║"
-          echo "║  + 10 Red Team vectors                       ║"
-          echo "║  Known limits: bubble, learning, load E1     ║"
-          echo "╚══════════════════════════════════════════════╝"
+          echo ╔══════════════════════════════════════════════╗
+          echo ║ AEGIS — CI/CD Security Report ║
+          echo ╠══════════════════════════════════════════════╣
+          echo ║ Gate: crypto + detection + forensic + e2e ║
+          echo ║ + 10 Red Team vectors ║
+          echo ║ Known limits: bubble, learning, load E1 ║
+          echo ╚══════════════════════════════════════════════╝
