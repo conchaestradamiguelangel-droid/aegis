@@ -23,7 +23,8 @@ from pathlib import Path
 
 logger = logging.getLogger("aegis.reporter")
 
-INCIDENTS_DIR = Path("/root/aegis/incidents")
+import os as _os
+INCIDENTS_DIR = Path(_os.environ.get("AEGIS_INCIDENTS_DIR", "incidents"))
 
 
 class IncidentReporter:
@@ -39,7 +40,7 @@ class IncidentReporter:
     def __init__(self):
         INCIDENTS_DIR.mkdir(exist_ok=True)
         self._telegram = None
-        logger.info("[REPORTER] Inicializado -- /root/aegis/incidents/ listo")
+        logger.info("[REPORTER] Inicializado -- dir=" + str(INCIDENTS_DIR) + " listo")
 
     def set_telegram(self, alerter):
         self._telegram = alerter
