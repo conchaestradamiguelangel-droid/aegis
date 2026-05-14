@@ -26,6 +26,7 @@ class AegisStatusServer:
         app.router.add_get("/health",    self._handle_health)
         app.router.add_get("/incidents", self._handle_incidents)
         app.router.add_get("/stream",    self._handle_stream)
+        app.router.add_get("/metrics",   self._handle_metrics)
 
         self._runner = web.AppRunner(app, access_log=None)
         await self._runner.setup()
@@ -90,5 +91,50 @@ class AegisStatusServer:
             except Exception as e:
                 logger.debug(f"[STATUS.SSE] Cliente desconectado: {e}")
                 break
-
-        return response
+    async def _handle_metrics(self, request):
+        try:
+            d  = self._aegis.full_status()
+            sy = d.get("system", {})
+            de = d.get("detector", {})
+            lk = d.get("lockdown", {})
+            fo = d.get("forensic", {})
+            am = d.get("amtd", {})
+            pe = d.get("persistence", {})
+            threat_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+            status_map = {"ONLINE": 1, "ALERT": 2, "LOCKDOWN": 3, "STOPPING": 0, "OFFLINE": 0}
+            sep = chr(10)
+            lines = [
+                "# HELP aegis_up Sistema AEGIS operativo (1=online)",
+                "# TYPE aegis_up gauge",
+                "aegis_up {}".format(status_map.get(str(sy.get("status", "")), 0)),
+                "# HELP aegis_uptime_seconds Tiempo activo en segundos",
+                "# TYPE aegis_uptime_seconds counter",
+                "aegis_uptime_seconds {}".format(sy.get("uptime_s", 0)),
+                "# HELP aegis_threat_level Nivel de amenaza (0=NONE 4=CRITICAL)",
+                "# TYPE aegis_threat_level gauge",
+                "aegis_threat_level {}".format(threat_map.get(str(sy.get("threat_level", "")), 0)),
+                "# HELP aegis_detections_total Detecciones acumuladas",
+                "# TYPE aegis_detections_total counter",
+                "aegis_detections_total {}".format(de.get("total_detections", 0)),
+                "# HELP aegis_active_ips IPs bajo seguimiento activo",
+                "# TYPE aegis_active_ips gauge",
+                "aegis_active_ips {}".format(de.get("active_ips", 0)),
+                "# HELP aegis_lockdowns_total Lockdowns ejecutados",
+                "# TYPE aegis_lockdowns_total counter",
+                "aegis_lockdowns_total {}".format(lk.get("total_lockdowns", 0)),
+                "# HELP aegis_incidents_total Incidentes forenses totales",
+                "# TYPE aegis_incidents_total counter",
+                "aegis_incidents_total {}".format(fo.get("total_incidents", 0)),
+                "# HELP aegis_incidents_open Incidentes forenses abiertos",
+                "# TYPE aegis_incidents_open gauge",
+                "aegis_incidents_open {}".format(fo.get("active_incidents", 0)),
+                "# HELP aegis_amtd_cycle Ciclo AMTD actual",
+                "# TYPE aegis_amtd_cycle counter",
+                "aegis_amtd_cycle {}".format(am.get("cycle", 0)),
+                "# HELP aegis_checkpoints_total Checkpoints escritos",
+                "# TYPE aegis_checkpoints_total counter",
+                "aegis_checkpoints_total {}".format(pe.get("checkpoints_created", 0)),
+            ]
+            return web.Response(text=sep.join(lines) + sep, content_type="text/plain", charset="utf-8")
+        except Exception as e:
+            return web.Response(text="# ERROR " + str(e) + chr(10), status=500, content_type="text/plain")
