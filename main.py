@@ -56,6 +56,8 @@ MACE_ENABLED  = "--mace" in sys.argv
 MACE_PORT     = int(_arg("--mace-port",    "8080"))
 MACE_TARGET   = _arg("--mace-target", "http://localhost:8000")
 MACE_WEBHOOK  = _arg("--mace-webhook", None)
+STATE_DIR     = _arg("--state-dir",   "state")
+STATUS_PORT   = int(_arg("--status-port", "8081"))
 
 # ── Alertas Telegram ──────────────────────────────────────────────────────────
 # Leer de variables de entorno o pasar como argumentos
@@ -65,7 +67,7 @@ TELEGRAM_CHAT_ID = os.environ.get("AEGIS_TG_CHAT",    _arg("--tg-chat"))
 
 # ── Conector ENLIL ────────────────────────────────────────────────────────────────────────────
 ENLIL_URL   = os.environ.get("AEGIS_ENLIL_URL",   "http://127.0.0.1:8002")
-ENLIL_TOKEN = os.environ.get("AEGIS_ENLIL_TOKEN", "enlil-aegis-2026")
+ENLIL_TOKEN = os.environ.get("AEGIS_ENLIL_TOKEN")
 
 # ─────────────────────────────────────────────
 # LOGGING
@@ -255,6 +257,7 @@ async def main():
     # Instanciar sistema
     aegis = AegisSystem(
         installation_id  = "AEGIS-VPS-001",
+        state_dir        = STATE_DIR,
         amtd_interval_s  = 30,
         decoy_ports      = [],
         shield_enabled   = SHIELD_ENABLED,
@@ -295,7 +298,7 @@ async def main():
             print(f"  ✗ Error arrancando MACE proxy: {e}")
 
     # ── Servidor de estado HTTP (puerto 8081) ────────────────────────────────
-    status_srv = AegisStatusServer(aegis, port=8081)
+    status_srv = AegisStatusServer(aegis, port=STATUS_PORT)
     await status_srv.start()
     print("  ✓ Servidor de estado activo en 127.0.0.1:8081")
 

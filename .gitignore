@@ -1,6 +1,11 @@
-# Runtime state — never commit
-state/
+# Entorno
+.env
+*.env
+.env.*
+
+# Logs e incidentes (datos reales)
 logs/
+incidents/
 *.log
 *.jsonl
 
@@ -13,33 +18,27 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-.eggs/
-venv/
-env/
-.env
 
-# One-off scripts (not canon)
-patch_*.py
-fix_*.py
-stress_*.py
-redteam_masivo*.py
-redteam_masivo_informe.html
+# Tests temporales
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Secrets
-.env
-.env.*
-secrets/
-*.pem
-*.key
-*.crt
-
-# OS
+# Archivos de sistema
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*.bak
+# Claves y certificados
+*.pem
+*.key
+*.crt
+*.p12
+
+# Scripts de desarrollo (ya aplicados)
+patch_aegis*.py
+patch_cv_tests.py
+fix_sse.py
+demo_seed.py
+demo_trust.py
