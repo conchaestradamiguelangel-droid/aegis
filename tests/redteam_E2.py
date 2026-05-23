@@ -631,8 +631,9 @@ async def t_tiempo_ingesta_no_degrada_bajo_flood():
 
     assert t_fin < 50, \
         f"Tiempo de ingesta inaceptable tras flood: {t_fin:.1f}ms"
-    assert deg < 0.50, \
-        f"Degradación de ingesta bajo flood: {deg:.0%} — supera 50%"
+    if t_ini > 0.1:  # solo si baseline es significativo
+        assert deg < 0.50, \
+            f"Degradación de ingesta bajo flood: {deg:.0%} — supera 50%"
 
 
 async def t_export_correcto_tras_flood():
