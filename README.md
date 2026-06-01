@@ -1,8 +1,8 @@
 # AEGIS — Autonomous Post-Quantum Cyber-Defense System
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Tests](https://github.com/conchaestradamiguelangel-droid/aegis/actions/workflows/tests.yml/badge.svg)](https://github.com/conchaestradamiguelangel-droid/aegis/actions)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/conchaestradamiguelangel-droid/aegis/actions/workflows/aegis_tests.yml/badge.svg)](https://github.com/conchaestradamiguelangel-droid/aegis/actions/workflows/aegis_tests.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Live](https://img.shields.io/badge/live-aegis--pq.com-green.svg)](https://aegis-pq.com)
 [![Paper](https://img.shields.io/badge/paper-Zenodo-blue.svg)](https://doi.org/10.5281/zenodo.20274935)
 
