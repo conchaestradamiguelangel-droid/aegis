@@ -90,8 +90,8 @@ The 54 E1 failures are latency degradation under extreme load, not security fail
 ### Requirements
 
 ```bash
-python3.11+
-pip install aiohttp pqcrypto liboqs-python
+python3.12+
+pip install -r requirements.txt
 ```
 
 ### Run
@@ -131,7 +131,7 @@ RestartSec=5
 ## Run Tests
 
 ```bash
-pytest tests/ -v
+pytest tests/test_suite.py -v
 ```
 
 611 tests covering all nine layers, forensic chain integrity, cryptographic primitives, and lockdown mechanics.
