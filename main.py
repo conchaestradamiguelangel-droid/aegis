@@ -66,8 +66,8 @@ TELEGRAM_TOKEN   = os.environ.get("AEGIS_TG_TOKEN",   _arg("--tg-token"))
 TELEGRAM_CHAT_ID = os.environ.get("AEGIS_TG_CHAT",    _arg("--tg-chat"))
 
 # ── Conector ENLIL ────────────────────────────────────────────────────────────────────────────
-ENLIL_URL   = os.environ.get("AEGIS_ENLIL_URL",   "http://127.0.0.1:8002")
-ENLIL_TOKEN = os.environ.get("AEGIS_ENLIL_TOKEN")
+ENLIL_URL     = os.environ.get("AEGIS_ENLIL_URL",     "http://127.0.0.1:8002")
+ENLIL_API_KEY = os.environ.get("AEGIS_ENLIL_API_KEY")
 
 # ─────────────────────────────────────────────
 # LOGGING
@@ -263,8 +263,8 @@ async def main():
         shield_enabled   = SHIELD_ENABLED,
         telegram_token   = TELEGRAM_TOKEN,
         telegram_chat_id = TELEGRAM_CHAT_ID,
-        enlil_url        = ENLIL_URL,
-        enlil_token      = ENLIL_TOKEN,
+        enlil_url        = ENLIL_URL if ENLIL_API_KEY else None,
+        enlil_api_key    = ENLIL_API_KEY,
     )
 
     modo_shield = "CON escudo (Capa 0.5 activa)" if SHIELD_ENABLED else \

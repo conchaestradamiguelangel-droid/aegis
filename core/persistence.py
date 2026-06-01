@@ -228,16 +228,18 @@ class AutoCheckpointer:
 
     def __init__(
         self,
-        manager:     CheckpointManager,
+        manager:              CheckpointManager,
         snapshot_fn,
-        interval_s:  int = DEFAULT_CHECKPOINT_INTERVAL_S,
+        interval_s:           int = DEFAULT_CHECKPOINT_INTERVAL_S,
+        post_checkpoint_fn         = None,
     ):
-        self._manager     = manager
-        self._snapshot_fn = snapshot_fn
-        self._interval_s  = interval_s
+        self._manager            = manager
+        self._snapshot_fn        = snapshot_fn
+        self._interval_s         = interval_s
+        self._post_checkpoint_fn = post_checkpoint_fn
         self._task: Optional[asyncio.Task] = None
-        self._running     = False
-        self._count       = 0
+        self._running            = False
+        self._count              = 0
 
     async def start(self):
         if self._running:
@@ -261,7 +263,12 @@ class AutoCheckpointer:
         while self._running:
             try:
                 snapshot = await self._snapshot_fn()
-                self._manager.save_checkpoint(snapshot)
+                result   = self._manager.save_checkpoint(snapshot)
+                if self._post_checkpoint_fn and "error" not in result:
+                    try:
+                        self._post_checkpoint_fn()
+                    except Exception as _pce:
+                        logger.warning(f"[PERSIST] Error en post_checkpoint: {_pce}")
                 self._count += 1
                 await asyncio.sleep(self._interval_s)
             except asyncio.CancelledError:

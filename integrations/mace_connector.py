@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from integrations.mace_proxy import MaceProxy, Blocklist
+from core.wal import WALManager
 
 logger = logging.getLogger("aegis.mace.connector")
 
@@ -52,6 +53,7 @@ class MaceConnector:
         proxy:         MaceProxy,
         block_ttl_s:   int  = None,
         webhook_url:   Optional[str] = None,
+        wal:           WALManager = None,
     ):
         self._proxy        = proxy
         self._block_ttl    = block_ttl_s or self.DEFAULT_BLOCK_TTL_S
@@ -70,6 +72,7 @@ class MaceConnector:
         self._webhook_url = webhook_url
         self._event_log:   list = []
         self._blocks_total = 0
+        self._wal = wal
 
         logger.info(
             f"[CONNECTOR] MaceConnector inicializado — "
@@ -145,6 +148,8 @@ class MaceConnector:
 
     def unblock_ip(self, ip: str):
         """Desbloquea una IP manualmente."""
+        if self._wal:
+            self._wal.write("unblock_ip", {"ip": ip})
         self._proxy.blocklist.unblock(ip)
         logger.info(f"[CONNECTOR] IP desbloqueada manualmente: {ip}")
 
@@ -167,6 +172,8 @@ class MaceConnector:
 
     def _block_ip(self, ip: str, ttl_s: int, reason: str):
         """Bloquea una IP en el proxy y registra el bloqueo."""
+        if self._wal:
+            self._wal.write("block_ip", {"ip": ip, "ttl_s": ttl_s})
         self._proxy.blocklist.block(ip, ttl_s=ttl_s)
         self._blocks_total += 1
         logger.warning(

@@ -106,15 +106,15 @@ class Blocklist:
         for ip, (exp, order) in self._blocked.items():
             if exp is None or exp > now:
                 remaining = None if exp is None else exp - now
-                result.append({ip: ip, remaining_s: remaining, wall_expire: None if remaining is None else wall + remaining})
+                result.append({"ip": ip, "remaining_s": remaining, "wall_expire": None if remaining is None else wall + remaining})
         return result
 
     def restore_from_checkpoint(self, entries: list):
         wall_now = time.time()
         mono_now = time.monotonic()
         for e in entries:
-            ip = e.get(ip)
-            wall_exp = e.get(wall_expire)
+            ip = e.get("ip")
+            wall_exp = e.get("wall_expire")
             if not ip:
                 continue
             if wall_exp is None:
@@ -124,7 +124,7 @@ class Blocklist:
                 if remaining <= 0:
                     continue
                 ttl = remaining
-            self.block(ip, ttl=ttl)
+            self.block(ip, ttl_s=int(ttl) if ttl is not None else None)
 
 
 # ─────────────────────────────────────────────

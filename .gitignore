@@ -42,3 +42,19 @@ patch_cv_tests.py
 fix_sse.py
 demo_seed.py
 demo_trust.py
+
+# Estado runtime (checkpoints, WAL — regenerados por el sistema)
+state/
+
+# Backups de desarrollo
+*.bak
+*.bak_*
+
+# Scripts de análisis y demo (no forman parte del sistema)
+demo.sh
+patch_*.py
+redteam_masivo.py
+redteam_masivo.out
+redteam_masivo_informe.html
+quantum_demo.py
+quantum_demo_report.html

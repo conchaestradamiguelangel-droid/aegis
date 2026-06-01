@@ -50,6 +50,7 @@ from integrations.telegram_alerts import TelegramAlerter, AlertConfig
 from core.incident_reporter     import IncidentReporter
 from integrations.enlil_connector import EnlilConnector
 from core.persistence import CheckpointManager, AutoCheckpointer
+from core.wal import WALManager
 
 logger = logging.getLogger("aegis.system")
 
@@ -382,7 +383,7 @@ class AegisSystem:
         telegram_token:   str   = None,
         telegram_chat_id: str   = None,
         enlil_url:        str   = None,
-        enlil_token:      str   = None,
+        enlil_api_key:    str   = None,
         state_dir:        str   = "state",
     ):
         self._id           = installation_id or f"AEGIS-{secrets.token_hex(4).upper()}"
@@ -417,6 +418,7 @@ class AegisSystem:
 
         # ── Persistencia — Hueco #7 ──────────────────────────────────────────
         self._persistence = CheckpointManager(state_dir=state_dir)
+        self._wal = WALManager(wal_dir=self._persistence._state_dir / "wal")
 
         # ── Capa 7: Análisis forense ──────────────────────────────────────────
         self.forensic = AegisForensic(persistence=self._persistence)
@@ -444,8 +446,8 @@ class AegisSystem:
 
         # ── Integración ENLIL ─────────────────────────────────────────────────
         self._enlil: Optional[EnlilConnector] = None
-        if enlil_url and enlil_token:
-            self._enlil = EnlilConnector(enlil_url, enlil_token)
+        if enlil_url and enlil_api_key:
+            self._enlil = EnlilConnector(enlil_url, enlil_api_key)
             logger.info("[AEGIS] Integración ENLIL configurada ✓")
 
         self._timing_lockdown  = _TimingWindow()
@@ -497,13 +499,17 @@ class AegisSystem:
 
         # ── Arrancar auto-checkpointer ────────────────────────────────────────
         self._auto_ckpt = AutoCheckpointer(
-            self._persistence, self._snapshot_for_checkpoint
+            self._persistence,
+            self._snapshot_for_checkpoint,
+            post_checkpoint_fn=self._wal.flush,
         )
         await self._auto_ckpt.start()
-        ckpt = self._persistence.load_latest_checkpoint()
-        if ckpt:
-            logger.info(f"[AEGIS] Estado previo cargado desde checkpoint {ckpt.get('checkpoint_id','?')}")
-            self._restore_from_checkpoint(ckpt)
+        self._pending_checkpoint = self._persistence.load_latest_checkpoint()
+        if self._pending_checkpoint:
+            logger.info(
+                f"[AEGIS] Checkpoint {self._pending_checkpoint.get('checkpoint_id','?')} encontrado "
+                f"— restauracion diferida hasta MACE"
+            )
 
         logger.info(
             f"[AEGIS] ═══ SISTEMA ONLINE ═══ "
@@ -835,7 +841,7 @@ class AegisSystem:
 
     def full_status(self) -> dict:
         """Estado detallado de cada capa."""
-        return {
+        result = {
             "system":      self.snapshot().to_dict(),
             "shield":      self.shield.status().__dict__,
             "twin":      self.twin.status(),
@@ -853,6 +859,12 @@ class AegisSystem:
                 "detection_ms": self._timing_detection.percentiles(),
             },
         }
+        if hasattr(self, "_mace_proxy") and self._mace_proxy is not None:
+            result["mace"] = self._mace_proxy.status()
+            if hasattr(self, "_mace_connector") and self._mace_connector is not None:
+                conn = self._mace_connector.status()
+                result["mace"]["blocked_ips_list"] = conn.get("blocked_ips", [])
+        return result
 
     async def _snapshot_for_checkpoint(self) -> dict:
         """Snapshot con estado restaurable: blocklist + lockdown + contadores."""
@@ -935,6 +947,7 @@ class AegisSystem:
         self._mace_connector = MaceConnector(
             proxy       = self._mace_proxy,
             webhook_url = webhook_url,
+            wal         = self._wal,
         )
 
         # Compartir blocklist del proxy con el conector
@@ -950,6 +963,31 @@ class AegisSystem:
 
         # Arrancar el proxy
         await self._mace_proxy.start()
+
+        # Restaurar estado desde checkpoint (diferido desde start())
+        pending = getattr(self, "_pending_checkpoint", None)
+        if pending:
+            self._restore_from_checkpoint(pending)
+            self._pending_checkpoint = None
+
+        # WAL recovery: replay mutaciones ocurridas tras el ultimo checkpoint
+        wal_ops = self._wal.recover()
+        for wal_path, entry in wal_ops:
+            op     = entry.get("op")
+            params = entry.get("params", {})
+            if op == "block_ip":
+                ip, ttl = params.get("ip"), params.get("ttl_s")
+                if ip:
+                    self._mace_proxy.blocklist.block(ip, ttl_s=int(ttl) if ttl else None)
+                    logger.warning(f"[WAL] Replay block_ip: {ip} ttl={ttl}s")
+            elif op == "unblock_ip":
+                ip = params.get("ip")
+                if ip:
+                    self._mace_proxy.blocklist.unblock(ip)
+                    logger.warning(f"[WAL] Replay unblock_ip: {ip}")
+            else:
+                logger.warning(f"[WAL] Op desconocida en recovery: {op} — ignorada")
+            self._wal.commit(wal_path)
 
         logger.info(
             f"[AEGIS] Integración MACE activa — "

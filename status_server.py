@@ -100,6 +100,7 @@ class AegisStatusServer:
             fo = d.get("forensic", {})
             am = d.get("amtd", {})
             pe = d.get("persistence", {})
+            ma = d.get("mace", {})
             threat_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
             status_map = {"ONLINE": 1, "ALERT": 2, "LOCKDOWN": 3, "STOPPING": 0, "OFFLINE": 0}
             sep = chr(10)
@@ -134,6 +135,9 @@ class AegisStatusServer:
                 "# HELP aegis_checkpoints_total Checkpoints escritos",
                 "# TYPE aegis_checkpoints_total counter",
                 "aegis_checkpoints_total {}".format(pe.get("checkpoints_created", 0)),
+                "# HELP aegis_blocked_ips IPs bloqueadas activas en el proxy MACE",
+                "# TYPE aegis_blocked_ips gauge",
+                "aegis_blocked_ips {}".format(ma.get("blocked_ips", 0)),
             ]
             return web.Response(text=sep.join(lines) + sep, content_type="text/plain", charset="utf-8")
         except Exception as e:
