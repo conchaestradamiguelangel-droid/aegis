@@ -588,6 +588,7 @@ class AegisBubble:
         self._status          = BubbleStatus.INACTIVE
         self._latency         = LatencyEngine()   # fallback compartido
         self._responses       = ResponseEngine()  # fallback compartido
+        self._global_evolution_cycle = 0
 
         self._callbacks_forensic: list = []
         self._callbacks_learning: list = []
@@ -734,6 +735,7 @@ class AegisBubble:
         session.interactions.append(interaction)
         session.interaction_count += 1
         session.evolution_cycle    = _resp_eng._cycle
+        self._global_evolution_cycle += 1
 
         self._status = BubbleStatus.ACTIVE
 
@@ -783,5 +785,5 @@ class AegisBubble:
             "status":          self._status.value,
             "active_sessions": len(self.active_sessions()),
             "total_sessions":  self.total_sessions(),
-            "evolution_cycle": self._responses._cycle,
+            "evolution_cycle": self._global_evolution_cycle,
         }

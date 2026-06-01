@@ -799,6 +799,7 @@ async def t_sync_now_fuerza_sync_inmediato():
     L_b = AegisLearning(installation_id="AEGIS-SYNC-B")
 
     L_a.register_peer("AEGIS-SYNC-B", L_b.import_intelligence)
+    L_b.trust_peer("AEGIS-SYNC-A", L_a.get_own_key())
 
     n = await L_a.sync_now()
     assert n == 1   # enviado correctamente a B
@@ -831,6 +832,7 @@ async def t_red_completa_a_exporta_b_aprende():
 
     # Registrar B como par de A y forzar sync
     L_a.register_peer("AEGIS-RED-B", L_b.import_intelligence)
+    L_b.trust_peer("AEGIS-RED-A", L_a.get_own_key())
     n = await L_a.sync_now()
     assert n == 1
 
