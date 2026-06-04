@@ -689,16 +689,20 @@ class AegisSystem:
 
     async def _on_detection_lockdown(self, detection: DetectionEvent):
         """C3 → C4: detección de patrón activa lockdown sin jump."""
+        _t0 = time.monotonic()
         if self._telegram:
             await self._telegram.on_threat_detected(detection)
         if self._enlil:
             await self._enlil.on_threat_detected(detection)
         if self.lockdown.is_sealed():
             await self.lockdown.reset()
+        _t0_lock = time.monotonic()
         result = await self.lockdown.execute(
             trigger = LockdownTrigger.DETECTION,
             context = detection.to_dict(),
         )
+        self._timing_lockdown.record((time.monotonic() - _t0_lock) * 1000)
+        self._timing_detection.record((time.monotonic() - _t0) * 1000)
         if self._telegram and result:
             lockdown_id = getattr(result, "lockdown_id", str(result))
             await self._telegram.on_lockdown(
@@ -708,6 +712,7 @@ class AegisSystem:
             )
         if result:
             asyncio.create_task(self._reporter.generate(detection, result, self.twin, self.forensic))
+            asyncio.create_task(self._auto_close_forensic(list(detection.source_ips or [])))
 
     async def _on_lockdown_twin_jump(self, lockdown_id: str):
         """C4 → C1: lockdown dispara salto atómico de gemelo."""
@@ -955,6 +960,9 @@ class AegisSystem:
 
         # Conectar detectores de AEGIS al conector
         self.detector.register_jump_callback(
+            self._mace_connector.on_detection
+        )
+        self.detector.register_lockdown_callback(
             self._mace_connector.on_detection
         )
         self.minefield.register_detection_callback(
