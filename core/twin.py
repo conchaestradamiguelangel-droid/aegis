@@ -191,11 +191,15 @@ class OperationalState:
         """
         Hash SHA3-256 del estado operativo.
         Excluye captured_at — varía en cada snapshot y no es parte del estado comparable.
+        Ruido de timing: iteraciones aleatorias adicionales para prevenir ataques de canal lateral.
         """
         snap = self.snapshot()
         snap.pop("captured_at", None)
         payload = str({k: snap[k] for k in sorted(snap.keys())}).encode("utf-8")
-        return hashlib.sha3_256(payload).hexdigest()
+        h = hashlib.sha3_256(payload).hexdigest()
+        for _ in range(secrets.randbelow(5)):
+            hashlib.sha3_256(payload).hexdigest()
+        return h
 
 
 def empty_operational_state() -> OperationalState:
