@@ -168,3 +168,15 @@ AEGIS is open to contributions. Priority areas:
 - Translations and documentation
 
 Two architectural constraints are non-negotiable: fire-and-forget on C3 (never block the proxy path), and immutability on C1 (twin jumps are forensic evidence).
+
+---
+
+## Companion Project: ENLIL
+
+AEGIS detects threats. **ENLIL decides what to do about them.**
+
+[ENLIL](https://github.com/conchaestradamiguelangel-droid/enlil) is an open source multi-model AI council: 9 specialized models deliberate in parallel on any query and emit a cryptographically signed Decree (ML-DSA-87). When AEGIS detects a high-severity incident, ENLIL provides the strategic judgment — documented, signed, auditable.
+
+- Self-hosted, BYOK (bring your own OpenRouter API key)
+- GPL v3 — same license as AEGIS
+- Live demo: https://enlil-council.com
