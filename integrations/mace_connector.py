@@ -14,12 +14,17 @@ DISEÑO:
     MaceProxy no conoce a AEGIS. AEGIS no conoce a MaceProxy.
     El conector actúa como adaptador entre ambos.
 """
+from __future__ import annotations
 
 import asyncio
 import logging
 import secrets
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from layers.detector import DetectionEvent
+    from layers.minefield import MineContact
 
 from integrations.mace_proxy import MaceProxy, Blocklist
 from core.wal import WALManager
@@ -51,10 +56,10 @@ class MaceConnector:
     def __init__(
         self,
         proxy:         MaceProxy,
-        block_ttl_s:   int  = None,
+        block_ttl_s:   Optional[int] = None,
         webhook_url:   Optional[str] = None,
-        wal:           WALManager = None,
-    ):
+        wal:           Optional[WALManager] = None,
+    ) -> None:
         self._proxy        = proxy
         self._block_ttl    = block_ttl_s or self.DEFAULT_BLOCK_TTL_S
         if webhook_url is not None:
@@ -82,7 +87,7 @@ class MaceConnector:
 
     # ── Callbacks para registrar en AEGIS ────────────────────────────────────
 
-    async def on_detection(self, detection_event) -> None:
+    async def on_detection(self, detection_event: DetectionEvent) -> None:
         """
         Callback para C3 (detector).
         Registrar con: aegis.detector.register_jump_callback(connector.on_detection)
@@ -93,7 +98,7 @@ class MaceConnector:
         det_type   = getattr(
             detection_event, "detection_type", None
         )
-        det_type_v = det_type.value if hasattr(det_type, "value") else str(det_type)
+        det_type_v = det_type.value if det_type is not None and hasattr(det_type, "value") else str(det_type)
 
         for ip in source_ips:
             self._block_ip(ip, self._block_ttl, reason=f"C3:{det_type_v}")
@@ -105,7 +110,7 @@ class MaceConnector:
                 self._notify_webhook("detection", source_ips, det_type_v)
             )
 
-    async def on_mine_contact(self, contact) -> None:
+    async def on_mine_contact(self, contact: MineContact) -> None:
         """
         Callback para C2 (minefield).
         Registrar con: aegis.minefield.register_detection_callback(connector.on_mine_contact)
@@ -125,7 +130,7 @@ class MaceConnector:
                 self._notify_webhook("mine_contact", [ip], mine_name)
             )
 
-    async def on_lockdown(self, snapshot) -> None:
+    async def on_lockdown(self, snapshot: dict) -> None:
         """
         Callback para C4 (lockdown).
         Registrar con: aegis.lockdown.register_forensic_callback(connector.on_lockdown)
@@ -142,11 +147,11 @@ class MaceConnector:
 
     # ── Bloqueo manual ────────────────────────────────────────────────────────
 
-    def block_ip(self, ip: str, ttl_s: int = None, reason: str = "manual"):
+    def block_ip(self, ip: str, ttl_s: Optional[int] = None, reason: str = "manual") -> None:
         """Bloquea una IP manualmente desde fuera del flujo de AEGIS."""
         self._block_ip(ip, ttl_s or self._block_ttl, reason=reason)
 
-    def unblock_ip(self, ip: str):
+    def unblock_ip(self, ip: str) -> None:
         """Desbloquea una IP manualmente."""
         if self._wal:
             self._wal.write("unblock_ip", {"ip": ip})
@@ -170,7 +175,7 @@ class MaceConnector:
 
     # ── Internos ──────────────────────────────────────────────────────────────
 
-    def _block_ip(self, ip: str, ttl_s: int, reason: str):
+    def _block_ip(self, ip: str, ttl_s: int, reason: str) -> None:
         """Bloquea una IP en el proxy y registra el bloqueo."""
         if self._wal:
             self._wal.write("block_ip", {"ip": ip, "ttl_s": ttl_s})
@@ -181,7 +186,7 @@ class MaceConnector:
             f"razón={reason} TTL={ttl_s}s"
         )
 
-    def _log_event(self, event_type: str, ips: list, detail: str):
+    def _log_event(self, event_type: str, ips: list, detail: str) -> None:
         """Añade entrada al log de integración."""
         self._event_log.append({
             "event_id":   secrets.token_hex(4).upper(),
@@ -191,11 +196,14 @@ class MaceConnector:
             "detail":     detail,
         })
 
-    async def _notify_webhook(self, event_type: str, ips: list, detail: str):
+    async def _notify_webhook(self, event_type: str, ips: list, detail: str) -> None:
         """
         Notifica a MACE vía webhook si está configurado.
         Fire-and-forget — fallo silencioso si MACE no responde.
         """
+        url = self._webhook_url
+        if not url:
+            return
         try:
             import aiohttp
             payload = {
@@ -207,7 +215,7 @@ class MaceConnector:
             }
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    self._webhook_url,
+                    url,
                     json    = payload,
                     timeout = aiohttp.ClientTimeout(total=5),
                 ) as resp:
