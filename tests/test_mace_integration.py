@@ -579,6 +579,8 @@ async def t_aegissystem_start_mace_integration():
             listen_port = 18942,
         )
         await asyncio.sleep(0.1)
+        # Loopback may be auto-blocked by minefield during startup; unblock for the health check
+        connector.unblock_ip("127.0.0.1")
 
         # Verificar que el proxy responde
         async with aiohttp.ClientSession() as session:
