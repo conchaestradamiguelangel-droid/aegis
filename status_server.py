@@ -101,6 +101,12 @@ class AegisStatusServer:
             am = d.get("amtd", {})
             pe = d.get("persistence", {})
             ma = d.get("mace", {})
+            sh = d.get("shield", {})
+            tw = d.get("twin", {})
+            mi = d.get("minefield", {})
+            su = d.get("surface", {})
+            ti = d.get("timings", {})
+            ma_stats = ma.get("stats", {})
             threat_map = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
             status_map = {"ONLINE": 1, "ALERT": 2, "LOCKDOWN": 3, "STOPPING": 0, "OFFLINE": 0}
             sep = chr(10)
@@ -138,6 +144,45 @@ class AegisStatusServer:
                 "# HELP aegis_blocked_ips IPs bloqueadas activas en el proxy MACE",
                 "# TYPE aegis_blocked_ips gauge",
                 "aegis_blocked_ips {}".format(ma.get("blocked_ips", 0)),
+                "# HELP aegis_mace_requests_total Peticiones totales procesadas por MACE",
+                "# TYPE aegis_mace_requests_total counter",
+                "aegis_mace_requests_total {}".format(ma_stats.get("requests_total", 0)),
+                "# HELP aegis_mace_requests_blocked Peticiones bloqueadas por MACE",
+                "# TYPE aegis_mace_requests_blocked counter",
+                "aegis_mace_requests_blocked {}".format(ma_stats.get("requests_blocked", 0)),
+                "# HELP aegis_mace_bytes_forwarded Bytes reenviados por MACE",
+                "# TYPE aegis_mace_bytes_forwarded counter",
+                "aegis_mace_bytes_forwarded {}".format(ma_stats.get("bytes_forwarded", 0)),
+            ]
+            layer_active = {
+                "shield":    int(bool(sh.get("active", False))),
+                "twin":      int(bool(tw.get("active", False))),
+                "minefield": int(bool(mi.get("files", 0) or mi.get("credentials", 0))),
+                "detector":  int("total_detections" in de),
+                "lockdown":  int(bool(lk.get("status", ""))),
+                "amtd":      int(am.get("status", "") == "ACTIVE"),
+                "surface":   int(bool(su.get("layers_monitored", 0))),
+                "mace":      int(bool(ma.get("running", False))),
+            }
+            lines += [
+                "# HELP aegis_layer_up Estado de cada capa de defensa (1=activa 0=inactiva)",
+                "# TYPE aegis_layer_up gauge",
+            ]
+            for layer, val in layer_active.items():
+                lines.append('aegis_layer_up{layer="' + layer + '"} ' + str(val))
+            det_t = ti.get("detection_ms", {})
+            lkd_t = ti.get("lockdown_ms", {})
+            lines += [
+                "# HELP aegis_detection_latency_ms Latencia de deteccion en milisegundos",
+                "# TYPE aegis_detection_latency_ms gauge",
+                'aegis_detection_latency_ms{quantile="0.5"} ' + str(det_t.get("p50") or 0),
+                'aegis_detection_latency_ms{quantile="0.95"} ' + str(det_t.get("p95") or 0),
+                'aegis_detection_latency_ms{quantile="0.99"} ' + str(det_t.get("p99") or 0),
+                "# HELP aegis_lockdown_latency_ms Latencia de lockdown en milisegundos",
+                "# TYPE aegis_lockdown_latency_ms gauge",
+                'aegis_lockdown_latency_ms{quantile="0.5"} ' + str(lkd_t.get("p50") or 0),
+                'aegis_lockdown_latency_ms{quantile="0.95"} ' + str(lkd_t.get("p95") or 0),
+                'aegis_lockdown_latency_ms{quantile="0.99"} ' + str(lkd_t.get("p99") or 0),
             ]
             return web.Response(text=sep.join(lines) + sep, content_type="text/plain", charset="utf-8")
         except Exception as e:
