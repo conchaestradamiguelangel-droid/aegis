@@ -4,18 +4,52 @@ AEGIS is a post-quantum cyber-defense system in active production. Contributions
 
 ## Before you start
 
-Read the architecture overview in the README, especially the 9-layer stack. Understand what the system does before proposing changes to it.
+Read the architecture overview below and in the README before proposing changes.
+
+## Architecture overview
+
+AEGIS runs as a single asyncio process with 9 defense layers:
+
+| Layer | Module | Description |
+|---|---|---|
+| C0 | `core/crypto.py` | ML-DSA-87 post-quantum signing (NIST FIPS 204) |
+| C0.5 | `layers/shield.py` | Decoy port honeypots |
+| C1 | `core/twin.py` | Digital twin — tracks attack surface state |
+| C2 | `layers/minefield.py` | Tarpit and rate limiting |
+| C3 | `layers/detector.py` | ML-based anomaly detection |
+| C4 | `core/lockdown.py` | Atomic lockdown on critical threat |
+| C5 | `layers/amtd.py` | Autonomous Moving Target Defense |
+| C6 | `layers/bubble.py` | Network isolation |
+| C7 | `layers/forensic.py` | Evidence collection and chain-of-custody |
+| C8 | `layers/learning.py` | Incident learning and pattern storage |
+
+## Development setup
+
+**Requirements:** Python 3.11+, Linux or WSL (asyncio signal handling requires Unix)
+
+```bash
+git clone https://github.com/conchaestradamiguelangel-droid/aegis
+cd aegis
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Run the test suite:
+
+```bash
+cd aegis
+pytest tests/ -v
+```
+
+All tests must pass before submitting a PR.
 
 ## How to contribute
 
 1. **Fork** the repository and create a branch: `git checkout -b fix/your-description`
-2. **Run tests** before and after your change:
-   ```bash
-   pip install -r requirements.txt -r requirements-test.txt
-   pytest tests/test_suite.py -v
-   ```
-3. **Add a test** for any new behavior. If you touch a layer, add a test case in the corresponding `tests/test_<layer>.py`.
-4. **Open a PR** — describe what you changed, why, and what the test result was.
+2. **Run tests** before and after your change
+3. **Add a test** for any new behavior. If you touch a layer, add a test case in the corresponding `tests/test_<layer>.py`
+4. **Open a PR** — describe what you changed, why, and what the test result was
 
 ## Good first issues
 
@@ -33,8 +67,9 @@ If your contribution touches any of these, explain the justification explicitly 
 
 ## What we are looking for
 
-- Performance improvements in the detection pipeline (without hiding E1 degradation)
+- Type annotations and docstrings (Google style) on core modules and layers
 - New detection patterns in `layers/detector.py`
+- Performance improvements in the detection pipeline (without hiding E1 degradation)
 - Cryptographic improvements aligned with NIST PQC standards
 - Documentation, tutorials, deployment guides
 - Integrations with SIEM/logging platforms
@@ -44,19 +79,17 @@ If your contribution touches any of these, explain the justification explicitly 
 - Changes that reduce detection coverage to improve latency numbers
 - Dependencies on external services that break offline deployability
 - Features that require persistent state outside of the documented checkpoint system
+- Anything that adds offensive capabilities
 
 ## Running specific layer tests
 
 ```bash
-# All core tests
-pytest tests/test_suite.py -v
+# All tests
+pytest tests/ -v
 
-# Integration test (slower)
-pytest tests/test_suite.py -v -m slow
-
-# A specific layer directly
-python3 tests/test_detector.py
-python3 tests/test_crypto.py
+# A specific layer
+pytest tests/test_detector.py -v
+pytest tests/test_crypto.py -v
 ```
 
 ## Questions
