@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest a new detection pattern, layer improvement, or integration
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the attack vector, gap, or use case you are hitting
+      placeholder: e.g. AEGIS does not detect X type of attack pattern
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      placeholder: Describe what you would like to see and how it would work
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer does this affect?
+      options:
+        - C0 — Crypto
+        - C0.5 — Shield
+        - C1 — Twin
+        - C2 — Minefield
+        - C3 — Detector
+        - C4 — Lockdown
+        - C5 — AMTD
+        - C6 — Bubble
+        - C7 — Forensic
+        - C8 — Learning
+        - MACE integration
+        - New layer / cross-cutting
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: This is strictly defensive (no active reconnaissance, no counterattacks)
+          required: true
+        - label: This does not break the C1 Twin audit trail (jump logs remain immutable)
+          required: false
+        - label: This does not introduce blocking calls in the C3 Detector (fire-and-forget only)
+          required: false
+        - label: This keeps AEGIS deployable as a single process on a standard VPS
+          required: false

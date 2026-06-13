@@ -1,0 +1,69 @@
+name: Bug report
+description: Something is not working as expected in AEGIS
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: AEGIS version
+      description: Run "git log --oneline -1" in the repo
+      placeholder: e.g. 844cbb8
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Affected layer
+      description: Which defense layer is involved?
+      options:
+        - C0 -- Crypto (ML-DSA-87 signing)
+        - C0.5 -- Shield (decoy ports)
+        - C1 -- Twin (digital twin)
+        - C2 -- Minefield (tarpit / rate limiting)
+        - C3 -- Detector (anomaly detection)
+        - C4 -- Lockdown (atomic lockdown)
+        - C5 -- AMTD (moving target defense)
+        - C6 -- Bubble (network isolation)
+        - C7 -- Forensic (evidence collection)
+        - C8 -- Learning (incident patterns)
+        - MACE integration (proxy)
+        - Prometheus metrics (/metrics)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error messages, stack traces, or unexpected output
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start AEGIS with: python main.py --daemon
+        2. Send traffic to port ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: Run "journalctl -u aegis -n 100" or paste relevant output
+      render: shell
+  - type: checkboxes
+    id: security
+    attributes:
+      label: Security note
+      options:
+        - label: This bug does not expose a real attack vector (if it does, email contacto@aegis-pq.com instead of opening a public issue)
+          required: true
