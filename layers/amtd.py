@@ -38,7 +38,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, Callable
+from typing import Any, Optional, Callable
 
 logger = logging.getLogger("aegis.amtd")
 
@@ -416,10 +416,10 @@ class AegisAMTD:
 
     def __init__(
         self,
-        rotation_interval_s: int  = DEFAULT_INTERVAL,
-        seed:                bytes = None,
-        num_ports:           int   = 3,
-    ):
+        rotation_interval_s: int             = DEFAULT_INTERVAL,
+        seed:                Optional[bytes] = None,
+        num_ports:           int             = 3,
+    ) -> None:
         # Semilla maestra — derivamos una por motor para independencia
         self._master_seed   = seed or secrets.token_bytes(32)
         self._interval      = rotation_interval_s
@@ -449,20 +449,20 @@ class AegisAMTD:
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
-    def register_stale_access_callback(self, cb: Callable):
+    def register_stale_access_callback(self, cb: Callable) -> None:
         """
         Capa 3 — llamado cuando alguien accede a superficie caducada.
         Recibe: {"type": "port"|"route", "value": ..., "cycle": ...}
         """
         self._stale_callbacks.append(cb)
 
-    def register_rotation_callback(self, cb: Callable):
+    def register_rotation_callback(self, cb: Callable) -> None:
         """Capa 7 — recibe RotationEvent tras cada ciclo."""
         self._rotation_callbacks.append(cb)
 
     # ── Ciclo de vida ─────────────────────────────────────────────────────────
 
-    async def start(self):
+    async def start(self) -> None:
         """Inicia el bucle de rotación continua."""
         if self._status == AMTDStatus.ACTIVE:
             return
@@ -475,7 +475,7 @@ class AegisAMTD:
             f"ciclo cada {self._interval}s"
         )
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Detiene el bucle de rotación."""
         self._status = AMTDStatus.IDLE
         if self._task and not self._task.done():
@@ -486,11 +486,11 @@ class AegisAMTD:
                 pass
         logger.info("[AMTD] Motor de rotación detenido")
 
-    async def rotate_now(self):
+    async def rotate_now(self) -> None:
         """Fuerza una rotación inmediata — para tests o respuesta a amenaza."""
         await self._execute_rotation()
 
-    async def _rotation_loop(self):
+    async def _rotation_loop(self) -> None:
         """Bucle principal — ejecuta rotación cada intervalo."""
         while self._status == AMTDStatus.ACTIVE:
             try:
@@ -501,7 +501,7 @@ class AegisAMTD:
             except Exception as e:
                 logger.error(f"[AMTD] Error en ciclo de rotación: {e}")
 
-    async def _execute_rotation(self):
+    async def _execute_rotation(self) -> None:
         """
         Ejecuta todos los motores de rotación simultáneamente.
         asyncio.gather() — todos a la vez, nunca secuencial.
@@ -592,7 +592,7 @@ class AegisAMTD:
         prev, curr = self._struct_engine.rotate()
         return prev, curr
 
-    async def _call(self, cb: Callable, arg):
+    async def _call(self, cb: Callable, arg: Any) -> None:
         try:
             if asyncio.iscoroutinefunction(cb):
                 await cb(arg)
@@ -632,7 +632,7 @@ class AegisAMTD:
             return False
         return self._route_engine.is_active(path)
 
-    async def _notify_stale(self, surface_type: str, value, source_ip: str):
+    async def _notify_stale(self, surface_type: str, value: Any, source_ip: str) -> None:
         """Notifica acceso a superficie caducada — Capa 3."""
         payload = {
             "type":      surface_type,
