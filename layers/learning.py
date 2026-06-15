@@ -575,6 +575,24 @@ class AegisLearning:
     It serves as the long-term feedback mechanism that enables AEGIS
     to improve deception strategies, detection thresholds, and
     containment behavior based on historical observations.
+    
+    Example:
+        learning = AegisLearning(
+            installation_id="AEGIS-ESP-001"
+        )
+
+        forensic.register_learning_callback(
+            learning.ingest_profile
+        )
+
+        packet = learning.export_intelligence()
+
+        learning.import_intelligence(
+            packet,
+            verify=True,
+        )
+
+        adjustments = learning.get_adjustments()
     """
 
     def __init__(
