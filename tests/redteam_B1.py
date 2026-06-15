@@ -7,7 +7,7 @@ CRITERIO DE ÉXITO (defensivo):
     A y B son indistinguibles por su ESTADO OPERATIVO.
     No se puede identificar al gemelo activo por contenido de estado,
     hash operativo, threat level, ni timing de respuesta.
-    Umbral: ninguna estrategia supera el 70% de acierto en 20 intentos.
+    Umbral: ninguna estrategia supera el 70% de acierto en 50 intentos.
 
 CRITERIO DE FALLO:
     El estado de A y B difiere en campos observables desde fuera.
@@ -33,7 +33,7 @@ PASS = "✓ PASS"
 FAIL = "✗ FAIL"
 results = []
 
-N_INTENTOS     = 20
+N_INTENTOS     = 50
 UMBRAL_ACIERTO = 0.70
 
 
@@ -406,10 +406,9 @@ async def t_5_sesiones_independientes_ninguna_supera_umbral():
         chain = TwinChain()
         await chain.start()
         await asyncio.sleep(0.1)
-        n_b5 = 40  # higher sample count to reduce variance in multi-session test
-        aciertos = sum(1 for _ in range(n_b5)
+        aciertos = sum(1 for _ in range(N_INTENTOS)
                        if _guess_combinado(chain) == "A")
-        tasa = aciertos / n_b5
+        tasa = aciertos / N_INTENTOS
         await chain.stop()
         if tasa > UMBRAL_ACIERTO:
             sesiones_fallidas.append((i, tasa))
