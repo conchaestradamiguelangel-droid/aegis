@@ -406,9 +406,10 @@ async def t_5_sesiones_independientes_ninguna_supera_umbral():
         chain = TwinChain()
         await chain.start()
         await asyncio.sleep(0.1)
-        aciertos = sum(1 for _ in range(N_INTENTOS)
+        n_b5 = 40  # higher sample count to reduce variance in multi-session test
+        aciertos = sum(1 for _ in range(n_b5)
                        if _guess_combinado(chain) == "A")
-        tasa = aciertos / N_INTENTOS
+        tasa = aciertos / n_b5
         await chain.stop()
         if tasa > UMBRAL_ACIERTO:
             sesiones_fallidas.append((i, tasa))
