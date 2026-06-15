@@ -30,6 +30,9 @@ from aiohttp import web
 
 logger = logging.getLogger("aegis.mace.proxy")
 
+# IPs que nunca se bloquean — el watchdog usa 127.0.0.1 para health checks
+LOOPBACK_WHITELIST: frozenset[str] = frozenset({"127.0.0.1", "::1"})
+
 
 # ─────────────────────────────────────────────
 # BLOCKLIST — IPs bloqueadas temporalmente
@@ -46,6 +49,8 @@ class Blocklist:
         self._order_counter = 0
 
     def block(self, ip: str, ttl_s: int = None):
+        if ip in LOOPBACK_WHITELIST:
+            return
         ttl = ttl_s if ttl_s is not None else self._default_ttl_s
         if ttl <= 0:
             self._blocked.pop(ip, None)
@@ -80,6 +85,8 @@ class Blocklist:
         self._blocked.pop(ip, None)
 
     def is_blocked(self, ip: str) -> bool:
+        if ip in LOOPBACK_WHITELIST:
+            return False
         entry = self._blocked.get(ip)
         if entry is None:
             return False
@@ -115,7 +122,7 @@ class Blocklist:
         for e in entries:
             ip = e.get("ip")
             wall_exp = e.get("wall_expire")
-            if not ip:
+            if not ip or ip in LOOPBACK_WHITELIST:
                 continue
             if wall_exp is None:
                 ttl = None
