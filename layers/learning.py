@@ -565,21 +565,33 @@ class CollectiveNetwork:
 
 class AegisLearning:
     """
-    Fachada de Capa 8 — Aprendizaje Colectivo.
+    Implements the AEGIS Learning (C8) layer.
 
-    Uso:
-        learning = AegisLearning(installation_id="AEGIS-ESP-001")
+    The learning layer collects signals from processed incidents,
+    maintains a local knowledge base, generates adaptive adjustments
+    for other AEGIS layers, and exchanges intelligence with trusted
+    peer installations.
 
-        # Conectar como receptor de Capa 7:
-        forensic.register_learning_callback(learning.ingest_profile)
+    It serves as the long-term feedback mechanism that enables AEGIS
+    to improve deception strategies, detection thresholds, and
+    containment behavior based on historical observations.
+    
+    Example:
+        learning = AegisLearning(
+            installation_id="AEGIS-ESP-001"
+        )
 
-        # Generar y exportar inteligencia:
+        forensic.register_learning_callback(
+            learning.ingest_profile
+        )
+
         packet = learning.export_intelligence()
 
-        # Importar inteligencia de otra instalación:
-        learning.import_intelligence(packet, verify=True)
+        learning.import_intelligence(
+            packet,
+            verify=True,
+        )
 
-        # Obtener ajustes para aplicar a otras capas:
         adjustments = learning.get_adjustments()
     """
 
@@ -622,23 +634,63 @@ class AegisLearning:
     # ── Callbacks de aplicación ───────────────────────────────────────────────
 
     def register_mine_callback(self, cb: Callable):
-        """Capa 2 — recibe ajustes de señuelos."""
+        """
+        Registers a callback for minefield adjustment updates.
+        The callback is invoked whenever the learning layer generates
+        adjustments for deceptive assets managed by Layer 2.
+
+        Args:
+            cb: Callable that accepts a dictionary containing minefield
+                adjustment recommendations.
+        """
         self._callbacks_mine.append(cb)
 
     def register_detector_callback(self, cb: Callable):
-        """Capa 3 — recibe ajustes de umbrales."""
+        """
+        Registers a callback for detector adjustment updates.
+        The callback is invoked whenever the learning layer generates
+        new detection threshold recommendations for Layer 3.
+
+        Args:
+            cb: Callable that accepts a dictionary containing detector
+                adjustment recommendations.
+
+        Returns:
+            None.
+        """
         self._callbacks_detector.append(cb)
 
     def register_bubble_callback(self, cb: Callable):
-        """Capa 6 — recibe ajustes de comportamiento."""
+        """
+        Registers a callback for bubble adjustment updates.
+        The callback is invoked whenever the learning layer generates
+        new behavior adjustment recommendations for Layer 6.
+
+        Args:
+            cb: Callable that accepts a dictionary containing bubble
+                adjustment recommendations.
+
+        Returns:
+            None.
+        """
         self._callbacks_bubble.append(cb)
 
     # ── Ingesta de perfiles desde Capa 7 ─────────────────────────────────────
 
     async def ingest_profile(self, profile) -> None:
         """
-        Ingesta un perfil forense completo de Capa 7.
-        Extrae todas las señales de aprendizaje del perfil.
+        Processes a forensic profile and extracts learning signals.
+        Analyzes the supplied forensic profile, updates the knowledge
+        base, records behavioral patterns, and generates adaptive
+        adjustments for connected layers.
+
+        Args:
+            profile: Forensic profile object containing incident data,
+                mine contacts, techniques, actor information, intent,
+                and bubble interactions.
+
+        Returns:
+            None.
         """
         self._kb.incident_count += 1
 
@@ -732,7 +784,17 @@ class AegisLearning:
         })
 
     def register_layer_pressure(self, layer: str):
-        """Registra presión de escape sobre una capa específica."""
+        """
+        Records pressure applied against a specific layer.
+        Updates learning statistics to track which layers receive the
+        highest number of escape or bypass attempts.
+
+        Args:
+            layer: Name or identifier of the pressured layer.
+
+        Returns:
+            None.
+        """
         self._kb.update_layer_pressure(layer)
         self._emit_signal(LearningSignal.LAYER_PRESSURED, {"layer": layer})
 
@@ -773,8 +835,14 @@ class AegisLearning:
 
     def export_intelligence(self) -> IntelligencePacket:
         """
-        Exporta la inteligencia acumulada como paquete compartible.
-        Firmado criptográficamente. Sin datos personales.
+        Exports accumulated intelligence as a shareable packet.
+
+        Builds a signed intelligence packet containing learned patterns,
+        recommended adjustments, and aggregated statistics suitable for
+        sharing with trusted AEGIS installations.
+
+        Returns:
+            IntelligencePacket containing the exported intelligence data.
         """
         packet = IntelligencePacket(
             packet_id         = secrets.token_hex(8).upper(),
@@ -798,12 +866,31 @@ class AegisLearning:
         return packet
 
     def trust_peer(self, origin_id: str, key: bytes):
-        """Registra un peer de confianza con su clave de firma (PKI)."""
+        """
+        Registers a trusted peer installation.
+        Adds a peer and its signing key to the local trust store,
+        allowing imported intelligence to be verified.
+
+        Args:
+            origin_id: Unique identifier of the peer installation.
+            key: Cryptographic signing key associated with the peer.
+
+        Returns:
+            None.
+        """
         self._trusted_peers[origin_id] = key
         logger.info(f"[LEARNING] Peer de confianza registrado: {origin_id}")
 
     def get_own_key(self) -> bytes:
-        """Retorna la clave de firma de esta instalación para compartir con peers."""
+        """
+        Returns this installation's signing key.
+
+        The key can be shared with trusted peers so they can verify
+        exported intelligence packets.
+
+        Returns:
+            Signing key used for packet authentication.
+        """
         return self._signing_key
 
     def import_intelligence(
@@ -812,10 +899,19 @@ class AegisLearning:
         verify: bool = True
     ) -> bool:
         """
-        Importa inteligencia de otra instalación AEGIS.
-        Requiere que el origen esté en la lista de peers de confianza,
-        o que se pase explícitamente su signing_key.
-        Retorna True si se importó correctamente.
+        Imports intelligence received from another installation.
+
+        Validates the packet signature when verification is enabled and
+        merges supported intelligence data into the local knowledge base.
+
+        Args:
+            packet: Intelligence packet to import.
+            signing_key: Optional signing key used to verify the packet.
+            verify: Whether packet signature verification should be
+                performed before importing.
+
+        Returns:
+            True if the packet was successfully imported; otherwise False.
         """
         # No importar paquetes propios
         if packet.origin_id == self._installation_id:
@@ -875,17 +971,17 @@ class AegisLearning:
 
     def predict_next_mine(self, current_mine_type: str) -> Optional[dict]:
         """
-        Dado el tipo de señuelo que acaba de tocarse, predice cuál tocará
-        el atacante a continuación basándose en secuencias históricas.
+        Predicts the next mine type likely to be triggered.
 
-        Retorna dict con predicted_mine, confidence y observations,
-        o None si no hay historia suficiente (< 3 observaciones).
+        Uses historical interaction sequences to estimate the most
+        probable next mine type and associated confidence score.
 
-        Uso:
-            pred = learning.predict_next_mine("MineType.FILE")
-            if pred and pred["confidence"] > 0.6:
-                # Preparar señuelo CREDENTIAL como el más convincente
-                minefield.promote(pred["predicted_mine"])
+        Args:
+            current_mine_type: Mine type most recently triggered.
+
+        Returns:
+            Dictionary containing prediction information, or None if
+            insufficient historical data is available.
         """
         return self._seq_tracker.predict_next(current_mine_type)
 
@@ -893,23 +989,40 @@ class AegisLearning:
         self, current_mine_type: str, depth: int = 3
     ) -> list:
         """
-        Predice los próximos `depth` tipos de señuelo que tocará el atacante.
-        Para cuando la confianza cae por debajo del 30%.
+        Predicts a sequence of future mine interactions.
+        Generates a multi-step prediction of likely mine types based on
+        historical attacker behavior patterns.
 
-        Retorna lista de dicts [{predicted_mine, confidence}, ...].
+        Args:
+            current_mine_type: Current mine type in the sequence.
+            depth: Maximum number of future steps to predict.
+
+        Returns:
+            List of prediction dictionaries ordered by sequence position.
         """
         return self._seq_tracker.predict_sequence(current_mine_type, depth)
 
     def get_sequence_model(self) -> dict:
-        """Exporta el modelo de secuencias aprendido — para diagnóstico."""
+        """
+        Returns the learned sequence prediction model.
+        Provides access to transition statistics used for attack path
+        prediction and diagnostic analysis.
+
+        Returns:
+            Dictionary containing learned sequence transition data.
+        """
         return self._seq_tracker.to_dict()
 
     # ── Ciclo de vida — Mejora 3 ──────────────────────────────────────────────
 
     async def start(self):
         """
-        Inicia el bucle automático de sincronización con la red colectiva.
-        Debe llamarse tras registrar pares con register_peer().
+        Starts the collective intelligence synchronization service.
+        Initializes the automatic synchronization loop responsible for
+        sharing intelligence with registered peer installations.
+
+        Returns:
+            None.
         """
         await self._network.start(self.export_intelligence)
         logger.info(
@@ -918,50 +1031,101 @@ class AegisLearning:
         )
 
     async def stop(self):
-        """Detiene el bucle automático de sincronización."""
+        """
+        Stops the collective intelligence synchronization service.
+        Terminates the automatic synchronization loop and releases any
+        associated background tasks.
+
+        Returns:
+            None.
+        """
         await self._network.stop()
 
     # ── Red colectiva — Mejora 3 ──────────────────────────────────────────────
 
     def register_peer(self, peer_id: str, import_callback: Callable):
         """
-        Registra una instalación par en la red colectiva.
-        import_callback(packet) recibirá el IntelligencePacket en cada sync.
+        Registers a peer installation in the collective network.
+        The supplied callback is invoked with an ``IntelligencePacket``
+        during each synchronization cycle. In production, the callback
+        would forward the packet over HTTP or gRPC to the remote
+        installation; in tests it can reference another instance's
+        ``import_intelligence`` method directly.
 
-        En una red real, import_callback haría una llamada HTTP/gRPC a la
-        instalación remota. En tests, puede ser learning_b.import_intelligence.
+        Args:
+            peer_id: Unique identifier of the peer installation.
+            import_callback: Callable that accepts an
+                ``IntelligencePacket`` and forwards or imports it.
+                May be a regular function or a coroutine.
 
-        Uso:
+        Returns:
+            None.
+
+        Example:
             learning_a.register_peer("AEGIS-DEU-001", learning_b.import_intelligence)
-            await learning_a.start()   # sync automático cada N minutos
+            await learning_a.start()
         """
+        
         self._network.register_peer(peer_id, import_callback)
 
     def unregister_peer(self, peer_id: str):
-        """Elimina un par de la red."""
+        """
+        Removes a peer installation from the collective network.
+
+        Args:
+            peer_id: Unique identifier of the peer installation to
+                remove.
+
+        Returns:
+            None.
+        """
         self._network.unregister_peer(peer_id)
 
     async def sync_now(self) -> int:
         """
-        Fuerza un ciclo de sync inmediato con todos los pares.
-        Útil para sincronización manual o tras un incidente crítico.
-        Retorna número de pares sincronizados con éxito.
+        Forces an immediate synchronization cycle.
+        Exports local intelligence and sends it to all registered
+        peers in the collective network.
+
+        Returns:
+            Number of peers successfully synchronized.
         """
         return await self._network.sync_once(self.export_intelligence)
 
     def get_network_status(self) -> dict:
-        """Estado de la red colectiva — pares, syncs, último sync."""
+        """
+        Returns the current collective network status.
+        Provides information about connected peers, synchronization
+        activity, and network operational state.
+
+        Returns:
+            Dictionary containing network status information.
+        """
         return self._network.status()
 
     def get_sync_log(self) -> list:
-        """Historial de ciclos de sync realizados."""
+        """
+        Returns the synchronization history.
+        Provides a record of completed synchronization operations and
+        their outcomes.
+
+        Returns:
+            List of synchronization log entries.
+        """
         return self._network.get_sync_log()
 
     # ── Consultas ─────────────────────────────────────────────────────────────
 
     def get_adjustments(self) -> dict:
         """
-        Retorna todos los ajustes calculados para aplicar a otras capas.
+        Generates recommended adjustments for connected layers.
+
+        Calculates adaptive recommendations using accumulated learning
+        data and current knowledge base statistics.
+
+        Returns:
+            Dictionary containing minefield, detector, bubble, and
+            reinforcement adjustments.
         """
         return {
             "mines":        self._engine.compute_mine_adjustments(self._kb),
@@ -971,15 +1135,44 @@ class AegisLearning:
         }
 
     def get_knowledge_base(self) -> dict:
+        """
+        Returns the current knowledge base state.
+
+        Returns:
+            Dictionary containing Knowledge Base Data.
+        """
         return self._kb.to_dict()
 
     def get_signal_log(self) -> list:
+        """
+        Returns the recorded learning signals.
+        Provides access to the internal history of learning events
+        generated during incident processing.
+
+        Returns:
+            List of recorded learning signals.
+        """
         return list(self._signals)
 
     def get_imported_packets(self) -> list:
+        """
+        Returns the list of imported packets.
+
+        Returns:
+            List of imported packets.
+        """
         return list(self._imported)
 
     def status(self) -> dict:
+        """
+        Returns the overall learning layer status.
+        Summarizes learning activity, synchronization state, knowledge
+        base metrics, and collective network information.
+
+        Returns:
+            Dictionary containing operational and statistical status
+            information for the learning layer.
+        """
         net = self._network.status()
         return {
             "installation_id":   self._installation_id,
