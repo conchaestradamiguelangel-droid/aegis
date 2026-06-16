@@ -18,6 +18,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import aiohttp
 from aiohttp import web
 
+# IP de prueba que simula al "atacante" -- loopback pero fuera del
+# LOOPBACK_WHITELIST (que solo cubre 127.0.0.1 y ::1), para poder
+# verificar bloqueo real sin chocar con la proteccion anti-self-lockout.
+ATTACKER_IP = "127.0.0.2"
+
+def _attacker_session() -> aiohttp.ClientSession:
+    connector = aiohttp.TCPConnector(local_addr=(ATTACKER_IP, 0))
+    return aiohttp.ClientSession(connector=connector)
+
 from integrations.mace_proxy     import MaceProxy, Blocklist, ProxyStats
 from integrations.mace_connector import MaceConnector
 
@@ -303,11 +312,11 @@ async def t_ip_bloqueada_no_llega_a_mace():
     await proxy.start()
     await asyncio.sleep(0.1)
 
-    # Bloquear la IP del cliente de test (127.0.0.1)
-    proxy.blocklist.block("127.0.0.1", ttl_s=60)
+    # Bloquear la IP del cliente de test (atacante simulado)
+    proxy.blocklist.block(ATTACKER_IP, ttl_s=60)
 
     try:
-        async with aiohttp.ClientSession() as session:
+        async with _attacker_session() as session:
             async with session.get("http://127.0.0.1:18920/secret") as resp:
                 assert resp.status == 403
     finally:
@@ -502,18 +511,18 @@ async def t_deteccion_bloquea_ip_que_ya_no_llega_a_mace():
     await proxy.start()
     await asyncio.sleep(0.1)
 
-    # Bloquear ambos loopbacks para robustez ante IPv4/IPv6
-    ip_atacante = "127.0.0.1"
+    # Atacante simulado: loopback fuera de la whitelist anti-self-lockout
+    ip_atacante = ATTACKER_IP
 
     try:
-        async with aiohttp.ClientSession() as session:
+        async with _attacker_session() as session:
             # Petición 1 — antes del bloqueo → llega a MACE
             resp1 = await session.get("http://127.0.0.1:18940/antes")
             assert resp1.status == 200
             assert len(hits) == 1
 
             # Simular detección de AEGIS — bloquear ambos loopbacks
-            event = _make_detection_event([ip_atacante, "::1"])
+            event = _make_detection_event([ip_atacante])
             await conn.on_detection(event)
 
             # Petición 2 — después del bloqueo → bloqueada
@@ -546,12 +555,11 @@ async def t_mine_contact_bloquea_y_protege_mace():
 
     try:
         # Simular contacto con señuelo — bloquear ambos loopbacks
-        contact = _make_mine_contact("127.0.0.1", "backup.json")
+        contact = _make_mine_contact(ATTACKER_IP, "backup.json")
         await conn.on_mine_contact(contact)
-        proxy.blocklist.block("::1", ttl_s=60)   # IPv6 loopback en Linux
 
         # Petición de esa IP → bloqueada
-        async with aiohttp.ClientSession() as session:
+        async with _attacker_session() as session:
             resp = await session.get("http://127.0.0.1:18941/after_mine")
             assert resp.status == 403, \
                 f"Esperado 403, obtenido {resp.status}"

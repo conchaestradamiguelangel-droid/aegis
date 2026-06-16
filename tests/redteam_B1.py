@@ -33,7 +33,7 @@ PASS = "✓ PASS"
 FAIL = "✗ FAIL"
 results = []
 
-N_INTENTOS     = 50
+N_INTENTOS     = 300
 UMBRAL_ACIERTO = 0.70
 
 
