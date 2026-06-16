@@ -1,17 +1,29 @@
 import asyncio
 """AEGIS — Servidor de estado HTTP interno (puerto 8081)."""
 import json
+import os
 from datetime import datetime
 from aiohttp import web
 
 import logging
 logger = logging.getLogger("aegis.status_server")
 
+_API_KEY = os.environ.get("AEGIS_API_KEY", "")
+
 
 def _json_safe(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()
     return str(obj)
+
+
+@web.middleware
+async def _auth_middleware(request: web.Request, handler):
+    if not _API_KEY or request.path == "/health":
+        return await handler(request)
+    if request.headers.get("X-Api-Key") != _API_KEY:
+        return web.json_response({"error": "unauthorized"}, status=401)
+    return await handler(request)
 
 
 class AegisStatusServer:
@@ -21,7 +33,7 @@ class AegisStatusServer:
         self._runner  = None
 
     async def start(self):
-        app = web.Application()
+        app = web.Application(middlewares=[_auth_middleware])
         app.router.add_get("/status",    self._handle_status)
         app.router.add_get("/health",    self._handle_health)
         app.router.add_get("/incidents", self._handle_incidents)
