@@ -6,6 +6,7 @@ services:
     environment:
       AEGIS_TG_TOKEN: ${AEGIS_TG_TOKEN:-}
       AEGIS_TG_CHAT: ${AEGIS_TG_CHAT:-}
+      AEGIS_API_KEY: ${AEGIS_API_KEY:-}
 
     ports:
       - "8080:8080"
