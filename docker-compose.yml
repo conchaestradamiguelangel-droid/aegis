@@ -1,0 +1,14 @@
+services:
+  aegis:
+    build: .
+    container_name: aegis
+
+    environment:
+      AEGIS_TG_TOKEN: ${AEGIS_TG_TOKEN:-}
+      AEGIS_TG_CHAT: ${AEGIS_TG_CHAT:-}
+
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+
+    restart: unless-stopped
