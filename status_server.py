@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 from datetime import datetime
+import subprocess
 from aiohttp import web
 
 import logging
@@ -19,7 +20,7 @@ def _json_safe(obj):
 
 @web.middleware
 async def _auth_middleware(request: web.Request, handler):
-    if not _API_KEY or request.path == "/health":
+    if not _API_KEY or request.path in ("/health", "/version"):
         return await handler(request)
     if request.headers.get("X-Api-Key") != _API_KEY:
         return web.json_response({"error": "unauthorized"}, status=401)
@@ -39,6 +40,7 @@ class AegisStatusServer:
         app.router.add_get("/incidents", self._handle_incidents)
         app.router.add_get("/stream",    self._handle_stream)
         app.router.add_get("/metrics",   self._handle_metrics)
+        app.router.add_get("/version",   self._handle_version)
 
         self._runner = web.AppRunner(app, access_log=None)
         await self._runner.setup()
@@ -61,6 +63,25 @@ class AegisStatusServer:
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         return web.json_response({"status": "ok"})
+
+    async def _handle_version(self, request: web.Request) -> web.Response:
+        try:
+            commit = subprocess.check_output(
+                ["git", "-C", "/root/aegis", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL, text=True
+            ).strip()
+            describe = subprocess.check_output(
+                ["git", "-C", "/root/aegis", "describe", "--tags"],
+                stderr=subprocess.DEVNULL, text=True
+            ).strip()
+        except Exception:
+            commit, describe = "unknown", "unknown"
+        return web.json_response({
+            "version": describe,
+            "commit":  commit,
+            "layers":  9,
+            "crypto":  "ML-DSA-87",
+        })
 
     async def _handle_incidents(self, request: web.Request) -> web.Response:
         n = int(request.rel_url.query.get("n", 10))
