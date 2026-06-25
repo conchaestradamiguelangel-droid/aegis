@@ -21,6 +21,7 @@ import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from core.mitre_mapper import map_incident
+from core.abuseipdb_enricher import enrich_ips
 
 logger = logging.getLogger("aegis.reporter")
 
@@ -60,6 +61,10 @@ class IncidentReporter:
 
         report = self._build(incident_id, now, detection, lockdown_result, twin_chain, forensic)
 
+        # Enriquecimiento AbuseIPDB (anadido al PIR antes de persistir)
+        source_ips = report.get("threat", {}).get("source_ips", [])
+        report["abuseipdb"] = await enrich_ips(source_ips)
+
         # Evidencia forense en JSON
         (INCIDENTS_DIR / f"{incident_id}.json").write_text(
             json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -68,9 +73,10 @@ class IncidentReporter:
         # Lectura humana en HTML
         html_content = self._html(report)
         mitre_section = self._mitre_html_block(report.get("mitre_attack", {}))
+        abuseipdb_section = self._abuseipdb_html_block(report.get("abuseipdb", []))
         html_content = html_content.replace(
             "</body></html>",
-            mitre_section + "</body></html>"
+            mitre_section + abuseipdb_section + "</body></html>"
         )
         (INCIDENTS_DIR / f"{incident_id}.html").write_text(
             html_content, encoding="utf-8"
@@ -255,6 +261,50 @@ class IncidentReporter:
             "<div class='sec-title'>MITRE ATT&amp;CK</div>"
             + body +
             "</div>"
+        )
+
+
+
+
+    @staticmethod
+    def _abuseipdb_html_block(enrichments: list) -> str:
+        if not enrichments:
+            return ""
+        rows = ""
+        for e in enrichments:
+            ip = e.get("ip", "")
+            if not e.get("enriched"):
+                reason = e.get("reason", "---")
+                rows += "<tr><td>" + ip + "</td><td colspan='5' style='color:#556;font-style:italic'>" + reason + "</td></tr>"
+                continue
+            score = e.get("abuse_confidence_score", 0)
+            color = "#ef4444" if score >= 75 else "#f59e0b" if score >= 25 else "#22c55e"
+            country = e.get("country_code", "?")
+            isp = (e.get("isp", "") or "---")[:40]
+            reports = e.get("total_reports", 0)
+            tor_flag = " TOR" if e.get("is_tor") else ""
+            link = "<a href='https://www.abuseipdb.com/check/" + ip + "' target='_blank' style='color:#94a3b8'>" + ip + "</a>"
+            badge = "<span style='background:" + color + ";color:#fff;padding:2px 8px;border-radius:9999px;font-size:.75rem'>" + str(score) + "%</span>"
+            rows += (
+                "<tr>"
+                "<td>" + link + "</td>"
+                "<td>" + badge + "</td>"
+                "<td>" + country + "</td>"
+                "<td>" + isp + "</td>"
+                "<td>" + str(reports) + "</td>"
+                "<td style='color:#f59e0b'>" + tor_flag + "</td>"
+                "</tr>"
+            )
+        return (
+            "<div class='sec' style='margin:12px 0'>"
+            "<div class='sec-title'>ABUSEIPDB</div>"
+            "<table style='width:100%;border-collapse:collapse;font-size:11px'>"
+            "<thead><tr style='color:#556;border-bottom:1px solid #1a2a1a'>"
+            "<th style='text-align:left'>IP</th>"
+            "<th style='text-align:left;padding:0 8px'>Confianza</th>"
+            "<th>Pais</th><th style='text-align:left;padding:0 8px'>ISP</th>"
+            "<th>Informes</th><th>Flags</th></tr></thead>"
+            "<tbody>" + rows + "</tbody></table></div>"
         )
 
     def _html(self, r: dict) -> str:
