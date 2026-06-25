@@ -20,6 +20,7 @@ import logging
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
+from core.mitre_mapper import map_incident
 
 logger = logging.getLogger("aegis.reporter")
 
@@ -65,8 +66,14 @@ class IncidentReporter:
         )
 
         # Lectura humana en HTML
+        html_content = self._html(report)
+        mitre_section = self._mitre_html_block(report.get("mitre_attack", {}))
+        html_content = html_content.replace(
+            "</body></html>",
+            mitre_section + "</body></html>"
+        )
         (INCIDENTS_DIR / f"{incident_id}.html").write_text(
-            self._html(report), encoding="utf-8"
+            html_content, encoding="utf-8"
         )
 
         # Actualizar indice global
@@ -155,6 +162,13 @@ class IncidentReporter:
                     "fingerprint":   getattr(profile, "fingerprint", ""),
                 }
 
+        mitre = map_incident(
+            detection_type=threat.get("type", "UNKNOWN"),
+            forensic_techniques=forensic_data.get("techniques", []),
+            actor=forensic_data.get("actor", "UNKNOWN"),
+            intent=forensic_data.get("intent", "UNKNOWN"),
+        )
+
         return {
             "incident_id":  incident_id,
             "generated_at": now.isoformat(),
@@ -162,6 +176,7 @@ class IncidentReporter:
             "response":     response,
             "twin":         twin_data,
             "forensic":     forensic_data,
+            "mitre_attack":  mitre,
             "verdict":      "NEUTRALIZADO" if response.get("success", True) else "DEGRADADO",
         }
 
@@ -204,6 +219,43 @@ class IncidentReporter:
     # -----------------------------------------
     # RENDER HTML
     # -----------------------------------------
+
+    @staticmethod
+    def _mitre_html_block(mitre: dict) -> str:
+        techs = mitre.get("techniques", [])
+        tactic_colors = {
+            "reconnaissance": "#7b2d8b", "initial-access": "#c0392b",
+            "discovery": "#1a6b8a", "credential-access": "#c0592b",
+            "lateral-movement": "#8b6914", "exfiltration": "#1a7a4a",
+            "persistence": "#2c3e7a", "execution": "#5a3070",
+            "resource-development": "#4a4a4a",
+        }
+        if not techs:
+            body = "<span style='color:#445;font-size:11px'>Sin tecnicas identificadas</span>"
+        else:
+            badges = "".join(
+                "<a href='" + t["url"] + "' target='_blank' "
+                "style='background:" + tactic_colors.get(t["tactic"], "#2a3a4a") + ";color:#fff;"
+                "border-radius:3px;padding:2px 8px;margin:2px 1px;display:inline-block;"
+                "font-size:11px;text-decoration:none'>"
+                "<b>" + t["id"] + "</b> " + t["name"] + "</a>"
+                for t in techs
+            )
+            cvg = mitre.get("coverage", "none").upper()
+            cvg_color = {"HIGH": "#00cc44", "MEDIUM": "#ffaa00", "PARTIAL": "#4488ff"}.get(cvg, "#445")
+            tactics_txt = " · ".join(mitre.get("tactics", []))
+            body = (
+                "<div style='margin-bottom:6px;color:#556;font-size:10px'>Tacticas: "
+                "<span style='color:#aac'>" + (tactics_txt or "---") + "</span>"
+                " &nbsp; Coverage: <span style='color:" + cvg_color + "'>" + cvg + "</span></div>"
+                + "<div>" + badges + "</div>"
+            )
+        return (
+            "<div class='sec' style='margin:12px 0'>"
+            "<div class='sec-title'>MITRE ATT&amp;CK</div>"
+            + body +
+            "</div>"
+        )
 
     def _html(self, r: dict) -> str:
         t   = r["threat"]

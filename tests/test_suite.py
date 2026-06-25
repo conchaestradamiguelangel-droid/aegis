@@ -24,6 +24,7 @@ _CORE_SCRIPTS = [
     "test_shield.py",
     "test_twin.py",
     "test_wal.py",
+    "test_mitre_mapper.py",
 ]
 
 # test_aegis.py es el test principal de integracion (más lento)
