@@ -2,14 +2,22 @@ services:
   aegis:
     build: .
     container_name: aegis
-
     environment:
       AEGIS_TG_TOKEN: ${AEGIS_TG_TOKEN:-}
       AEGIS_TG_CHAT: ${AEGIS_TG_CHAT:-}
       AEGIS_API_KEY: ${AEGIS_API_KEY:-}
-
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
     ports:
       - "8080:8080"
       - "8081:8081"
-
+    volumes:
+      - aegis-state:/app/state
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  aegis-state:

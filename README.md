@@ -114,6 +114,17 @@ python main.py --daemon --mace
 | AEGIS_ENLIL_TOKEN   | ENLIL orchestrator token | No       |
 | AEGIS_INCIDENTS_DIR | Path to incident reports | No       |
 
+### Docker
+```bash
+git clone https://github.com/conchaestradamiguelangel-droid/aegis && cd aegis
+cp .env.example .env          # opcional: añade AEGIS_API_KEY y ABUSEIPDB_API_KEY
+docker compose up -d
+curl http://localhost:8081/health
+```
+
+AEGIS arranca en modo daemon, expone el API de estado en el puerto `8081` y el proxy MACE en `8080`.
+
+
 ### systemd (production)
 
 ```ini
