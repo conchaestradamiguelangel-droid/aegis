@@ -76,6 +76,13 @@ class DetectionEvent:
     elapsed_ms:     float           # tiempo desde primer indicador hasta detección
 
     def to_dict(self) -> dict:
+        """Convert the detection event to a serializable dictionary.
+
+        Returns:
+            dict: Detection event with ``datetime`` and ``Enum`` fields
+                serialized to ISO-8601 strings and their ``.value``
+                representations respectively.
+        """
         d = asdict(self)
         d["timestamp"]       = self.timestamp.isoformat()
         d["detection_type"]  = self.detection_type.value
@@ -109,6 +116,13 @@ class IPProfile:
             self.ports_touched = set(self.ports_touched)
 
     def add_event(self, event_type: str, detail: str, port: int = 0):
+        """Record a single network event and update the behavioral profile.
+
+        Args:
+            event_type: Source of the event (``"shield"``, ``"mine"``, …).
+            detail: Path or resource identifier touched by this event.
+            port: Network port involved; 0 if not applicable.
+        """
         now = time.monotonic()
         self.last_seen = now
         self.request_times.append(now)
@@ -119,7 +133,14 @@ class IPProfile:
             self.ports_touched.add(port)
 
     def requests_per_second(self, window: float = 10.0) -> float:
-        """Peticiones por segundo en la ventana de tiempo especificada."""
+        """Calculate the request rate for this IP over a sliding time window.
+
+        Args:
+            window: Time window in seconds to measure the rate over.
+
+        Returns:
+            float: Average requests per second within *window*.
+        """
         now    = time.monotonic()
         cutoff = now - window
         recent = sum(1 for t in self.request_times if t > cutoff)
@@ -127,12 +148,27 @@ class IPProfile:
         return recent / elapsed if elapsed > 0 else 0.0
 
     def unique_paths(self) -> int:
+        """Return the number of distinct paths this IP has touched.
+
+        Returns:
+            int: Count of unique paths or resources explored.
+        """
         return len(self.paths_touched)
 
     def unique_ports(self) -> int:
+        """Return the number of distinct ports this IP has contacted.
+
+        Returns:
+            int: Count of unique ports explored.
+        """
         return len(self.ports_touched)
 
     def time_active_seconds(self) -> float:
+        """Return seconds elapsed between the first and last recorded event.
+
+        Returns:
+            float: Duration of observed activity in seconds.
+        """
         return self.last_seen - self.first_seen
 
 
@@ -198,9 +234,22 @@ class PassiveAgent:
         return detection
 
     def contacts_from_ip(self, ip: str) -> list:
+        """Return all mine-contact events originating from a specific IP.
+
+        Args:
+            ip: Source IP address to filter contacts by.
+
+        Returns:
+            list: Contact records whose ``source_ip`` matches *ip*.
+        """
         return [c for c in self._contacts if c.source_ip == ip]
 
     def total_contacts(self) -> int:
+        """Return the total number of mine contacts recorded.
+
+        Returns:
+            int: Count of all mine-contact events across all IPs.
+        """
         return len(self._contacts)
 
 
@@ -459,12 +508,30 @@ class ActiveAgent:
             )
 
     def get_profile(self, ip: str) -> Optional[IPProfile]:
+        """Return the behavioral profile for an IP, or None if not tracked.
+
+        Args:
+            ip: IP address to look up.
+
+        Returns:
+            IPProfile if the IP has been observed, ``None`` otherwise.
+        """
         return self._profiles.get(ip)
 
     def total_detections(self) -> int:
+        """Return the total number of detections emitted by the active agent.
+
+        Returns:
+            int: Count of ``DetectionEvent`` objects generated.
+        """
         return len(self._detections)
 
     def active_ips(self) -> list:
+        """Return all IP addresses currently tracked in behavioral profiles.
+
+        Returns:
+            list[str]: Tracked IP address strings.
+        """
         return list(self._profiles.keys())
 
 
@@ -521,15 +588,35 @@ class AegisDetector:
     # ── Registro de callbacks hacia otras capas ───────────────────────────────
 
     def register_jump_callback(self, cb: Callable):
-        """Capa 1 — se llama cuando se confirma intrusión → salto atómico."""
+        """Register a callback to trigger an atomic jump (Layer 1).
+
+        Called immediately when a CONFIRMED intrusion is detected
+        (i.e. a honeypot mine was touched).
+
+        Args:
+            cb: Async or sync callable that accepts a ``DetectionEvent``.
+        """
         self._callbacks_jump.append(cb)
 
     def register_lockdown_callback(self, cb: Callable):
-        """Capa 4 — se llama cuando se detecta amenaza → cierre atómico."""
+        """Register a callback to request an atomic lockdown (Layer 4).
+
+        Called when a HIGH-confidence behavioral threat is detected
+        (reconnaissance, port sweep, or automation).
+
+        Args:
+            cb: Async or sync callable that accepts a ``DetectionEvent``.
+        """
         self._callbacks_lockdown.append(cb)
 
     def register_forensic_callback(self, cb: Callable):
-        """Capa 7 — recibe evidencia completa de cada detección."""
+        """Register a callback to receive full forensic evidence (Layer 7).
+
+        Called for every detection regardless of action required.
+
+        Args:
+            cb: Async or sync callable that accepts a ``DetectionEvent``.
+        """
         self._callbacks_forensic.append(cb)
 
     # ── Puntos de entrada desde otras capas ──────────────────────────────────
@@ -550,6 +637,15 @@ class AegisDetector:
         profile.add_event("mine", contact.mine_name, contact.source_port)
 
     async def register_shield_probe(self, probe_event):
+        """Register a network probe event from Layer 0.5 (shield).
+
+        Feeds the event to the active agent for behavioral pattern analysis.
+        Silently discarded when the internal semaphore is saturated.
+
+        Args:
+            probe_event: Shield probe event containing ``source_ip``,
+                ``target_port`` and related connection metadata.
+        """
         if self._event_semaphore.locked():
             self._total_events_discarded += 1
             return
@@ -562,6 +658,13 @@ class AegisDetector:
             )
 
     async def register_network_event(self, ip: str, port: int, path: str = ""):
+        """Register a raw network event from network-level monitoring.
+
+        Args:
+            ip: Source IP address of the event.
+            port: Destination port that was contacted.
+            path: Optional URL path or resource identifier.
+        """
         if self._event_semaphore.locked():
             self._total_events_discarded += 1
             return
@@ -634,6 +737,11 @@ class AegisDetector:
     # ── Consultas ─────────────────────────────────────────────────────────────
 
     def total_detections(self) -> int:
+        """Return the total number of detections recorded by the detector.
+
+        Returns:
+            int: Combined count of passive (mine) and active (pattern) detections.
+        """
         return len(self._detections)
 
     def get_detection_log(self) -> list:
@@ -645,9 +753,20 @@ class AegisDetector:
         return self._active.get_profile(ip)
 
     def active_ips(self) -> list:
+        """Return all IPs currently tracked by the active agent.
+
+        Returns:
+            list[str]: IP addresses with active behavioral profiles.
+        """
         return self._active.active_ips()
 
     def get_rate_limit_stats(self) -> dict:
+        """Return rate-limiting statistics for event ingestion.
+
+        Returns:
+            dict: Stats with keys ``semaphore_limit``, ``events_discarded``,
+                and ``currently_processing``.
+        """
         return {
             "semaphore_limit":        self._event_semaphore._value,
             "events_discarded":       self._total_events_discarded,
@@ -655,6 +774,12 @@ class AegisDetector:
         }
 
     def status(self) -> dict:
+        """Return a comprehensive status snapshot of the detector.
+
+        Returns:
+            dict: Counts of detections, passive contacts, active detections,
+                tracked IPs, registered callbacks, and rate-limit stats.
+        """
         return {
             "total_detections":  self.total_detections(),
             "passive_contacts":  self._passive.total_contacts(),
