@@ -20,6 +20,27 @@ AEGIS implements the NIST post-quantum standards (FIPS 203, 204, 205) in a fully
 
 ---
 
+## When to Choose AEGIS
+
+| Situation | AEGIS | Wazuh | Suricata | Falco |
+|-----------|-------|-------|----------|-------|
+| No dedicated security team | ✅ fully autonomous | ❌ requires SIEM ops | ❌ requires rule maintenance | ❌ |
+| Post-quantum / Q-Day readiness | ✅ ML-DSA-87 native | ❌ | ❌ | ❌ |
+| Single service protection | ✅ one Python process | ❌ multi-component | ❌ | ❌ |
+| Moving target defense (AMTD) | ✅ C5 built-in | ❌ | ❌ | ❌ |
+| Cryptographic forensic evidence | ✅ C1 signed chain | partial | ❌ | ❌ |
+| ML anomaly detection + learning | ✅ C3+C8 | partial | ❌ | ❌ |
+| Open source, self-hosted | ✅ GPL v3 | ✅ GPL | ✅ GPL | ✅ Apache |
+| SIEM integration (ELK, Splunk) | ❌ planned | ✅ best-in-class | ✅ | ✅ |
+| Large-scale network (>1 Gbps) | ❌ single process | ✅ | ✅ | ✅ |
+| Kubernetes / cloud-native | ❌ | partial | ❌ | ✅ |
+
+**Choose AEGIS when** you protect a specific service, have no dedicated security team, need quantum-safe cryptography, or want a zero-configuration autonomous system.
+
+**Choose Wazuh/Suricata** when you need SIEM integration, large-scale network analysis, or cloud-native deployments.
+
+---
+
 ## Architecture: Nine Defensive Layers
 
 ```
@@ -117,12 +138,12 @@ python main.py --daemon --mace
 ### Docker
 ```bash
 git clone https://github.com/conchaestradamiguelangel-droid/aegis && cd aegis
-cp .env.example .env          # opcional: añade AEGIS_API_KEY y ABUSEIPDB_API_KEY
+cp .env.example .env          # optional: add AEGIS_API_KEY and ABUSEIPDB_API_KEY
 docker compose up -d
 curl http://localhost:8081/health
 ```
 
-AEGIS arranca en modo daemon, expone el API de estado en el puerto `8081` y el proxy MACE en `8080`.
+AEGIS starts in daemon mode, exposes the status API on port `8081`, and the MACE proxy on `8080`.
 
 
 ### systemd (production)
@@ -146,6 +167,15 @@ pytest tests/test_suite.py -v
 ```
 
 611 tests covering all nine layers, forensic chain integrity, cryptographic primitives, and lockdown mechanics.
+
+---
+
+## Use Cases
+
+- **API protection**: proxy any HTTP service behind AEGIS; threats are detected and blocked before reaching your service
+- **Compliance evidence**: every incident generates a ML-DSA-87 signed forensic report — tamper-proof audit trail for NIS2, DORA, or ISO 27001
+- **Quantum-safe infrastructure**: replace RSA/ECC signing with NIST FIPS 203/204/205 before Q-Day
+- **SOC augmentation**: deploy AEGIS alongside existing tools; use [ENLIL](https://github.com/conchaestradamiguelangel-droid/enlil) for strategic AI-assisted incident analysis
 
 ---
 
@@ -178,7 +208,11 @@ AEGIS is open to contributions. Priority areas:
 - Performance improvements for the E1 known limit
 - Translations and documentation
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and non-negotiable constraints.
+
 Two architectural constraints are non-negotiable: fire-and-forget on C3 (never block the proxy path), and immutability on C1 (twin jumps are forensic evidence).
+
+Good first issues: see [ROADMAP.md](ROADMAP.md) for current open tasks.
 
 ---
 
