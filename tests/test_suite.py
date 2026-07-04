@@ -26,6 +26,7 @@ _CORE_SCRIPTS = [
     "test_wal.py",
     "test_mitre_mapper.py",
     "test_abuseipdb_enricher.py",
+    "test_status_incidents.py",
 ]
 
 # test_aegis.py es el test principal de integracion (más lento)
