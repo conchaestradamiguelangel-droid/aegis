@@ -5,6 +5,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Live](https://img.shields.io/badge/live-aegis--pq.com-green.svg)](https://aegis-pq.com)
 [![Paper](https://img.shields.io/badge/paper-Zenodo-blue.svg)](https://doi.org/10.5281/zenodo.20274935)
+[![Hacker News](https://img.shields.io/badge/Hacker%20News-Show%20HN-orange)](https://news.ycombinator.com/item?id=48883787)
 
 **AEGIS** is an autonomous, nine-layer post-quantum cyber-defense system deployed in production. It protects network services against modern and quantum-era threats using NIST-standardized post-quantum cryptography, without human intervention.
 
