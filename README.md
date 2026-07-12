@@ -12,6 +12,8 @@
 
 ---
 
+![AEGIS dashboard](https://raw.githubusercontent.com/conchaestradamiguelangel-droid/aegis/main/docs/screenshot.png)
+
 ## Why AEGIS
 
 The cryptographic infrastructure of the internet (RSA, ECC, Diffie-Hellman) is mathematically broken by quantum computers running Shor's algorithm. The Q-Day, estimated 2030-2033, is not a theory: it is an active geopolitical race between the US, China, and the EU.
