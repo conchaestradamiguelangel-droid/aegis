@@ -4,12 +4,14 @@ import json
 import os
 from datetime import datetime
 import subprocess
+import uuid
 from aiohttp import web
 
 import logging
 logger = logging.getLogger("aegis.status_server")
 
 _API_KEY = os.environ.get("AEGIS_API_KEY", "")
+REQUEST_ID_HEADER = "X-Request-ID"
 
 
 def _json_safe(obj):
@@ -18,6 +20,24 @@ def _json_safe(obj):
     return str(obj)
 
 
+@web.middleware
+
+async def _request_id_middleware(request: web.Request, handler):
+
+    req_id = str(uuid.uuid4())
+    request["request_id"] = req_id
+    logger.info(f"[{req_id}] {request.method} {request.path}")
+
+    try:
+        response = await handler(request)
+    except web.HTTPException as exc:
+        exc.headers[REQUEST_ID_HEADER] = req_id
+        raise
+    if REQUEST_ID_HEADER not in response.headers:
+        response.headers[REQUEST_ID_HEADER] = req_id
+    return response
+
+ 
 @web.middleware
 async def _auth_middleware(request: web.Request, handler):
     if not _API_KEY or request.path in ("/health", "/version"):
@@ -34,7 +54,7 @@ class AegisStatusServer:
         self._runner  = None
 
     async def start(self):
-        app = web.Application(middlewares=[_auth_middleware])
+        app = web.Application(middlewares=[_request_id_middleware, _auth_middleware])
         app.router.add_get("/status",    self._handle_status)
         app.router.add_get("/health",    self._handle_health)
         app.router.add_get("/incidents", self._handle_incidents)
@@ -99,6 +119,7 @@ class AegisStatusServer:
         response.headers["Cache-Control"]      = "no-cache"
         response.headers["X-Accel-Buffering"]  = "no"
         response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers[REQUEST_ID_HEADER] = request.get("request_id", "")
         await response.prepare(request)
 
         tick = 0
