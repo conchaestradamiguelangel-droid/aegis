@@ -204,7 +204,7 @@ GPL v3: free to use, study, modify, and distribute. Derivative works must remain
 
 ## Technical Writing
 
-- [How We Implemented ML-DSA-87 Post-Quantum Signatures in a Production IDS](docs/blog/ml-dsa-87-post-quantum-ids.md) — Deep dive into the NIST FIPS 204 implementation: signing pipeline, performance benchmarks, and verification workflow.
+- [How We Implemented ML-DSA-87 Post-Quantum Signatures in a Production IDS](https://dev.to/conchaestradamiguelangeldroid/how-we-implemented-ml-dsa-87-post-quantum-signatures-in-a-production-ids-fn3) — published on Dev.to — Deep dive into the NIST FIPS 204 implementation: signing pipeline, performance benchmarks, and verification workflow.
 
 ## Contributing
 
