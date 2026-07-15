@@ -5,12 +5,15 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Live](https://img.shields.io/badge/live-aegis--pq.com-green.svg)](https://aegis-pq.com)
 [![Paper](https://img.shields.io/badge/paper-Zenodo-blue.svg)](https://doi.org/10.5281/zenodo.20274935)
+[![Hacker News](https://img.shields.io/badge/Hacker%20News-Show%20HN-orange)](https://news.ycombinator.com/item?id=48883787)
 
 **AEGIS** is an autonomous, nine-layer post-quantum cyber-defense system deployed in production. It protects network services against modern and quantum-era threats using NIST-standardized post-quantum cryptography, without human intervention.
 
 > *"We do not wait for Q-Day. We defend against it today."*
 
 ---
+
+![AEGIS dashboard](https://raw.githubusercontent.com/conchaestradamiguelangel-droid/aegis/main/docs/screenshot.png)
 
 ## Why AEGIS
 
@@ -197,6 +200,11 @@ GPL v3: free to use, study, modify, and distribute. Derivative works must remain
 - Email: contacto@aegis-pq.com
 
 ---
+
+
+## Technical Writing
+
+- [How We Implemented ML-DSA-87 Post-Quantum Signatures in a Production IDS](https://dev.to/conchaestradamiguelangeldroid/how-we-implemented-ml-dsa-87-post-quantum-signatures-in-a-production-ids-fn3) — published on Dev.to — Deep dive into the NIST FIPS 204 implementation: signing pipeline, performance benchmarks, and verification workflow.
 
 ## Contributing
 
