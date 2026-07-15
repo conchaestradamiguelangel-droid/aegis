@@ -31,7 +31,7 @@ jobs:
 
       - name: Open issue if any service is down
         if: env.AEGIS_DOWN == 'true' || env.ENLIL_DOWN == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const down = [];
