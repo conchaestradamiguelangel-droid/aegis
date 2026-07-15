@@ -201,6 +201,11 @@ GPL v3: free to use, study, modify, and distribute. Derivative works must remain
 
 ---
 
+
+## Technical Writing
+
+- [How We Implemented ML-DSA-87 Post-Quantum Signatures in a Production IDS](docs/blog/ml-dsa-87-post-quantum-ids.md) — Deep dive into the NIST FIPS 204 implementation: signing pipeline, performance benchmarks, and verification workflow.
+
 ## Contributing
 
 AEGIS is open to contributions. Priority areas:
