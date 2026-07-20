@@ -33,6 +33,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Callable
+from core.log_chain import append_entry as _chain_append
 
 logger = logging.getLogger("aegis.forensic")
 
@@ -860,6 +861,7 @@ class AegisForensic:
                 f.write(line + "\n")
                 f.flush()
                 os.fsync(f.fileno())
+            _chain_append({"incident": incident_id, "fp": getattr(profile, "fingerprint", "")})
         except OSError as e:
             logger.warning(f"[FORENSIC] Error escribiendo incidente a disco: {e}")
 
