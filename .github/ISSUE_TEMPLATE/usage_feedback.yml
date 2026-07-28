@@ -1,0 +1,43 @@
+name: Usage feedback
+description: Tell us how you're using AEGIS — what worked, what didn't, what's missing
+labels: [feedback]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: What are you protecting, and how?
+      description: What kind of service/server did you deploy AEGIS on? Which layers did you enable?
+      placeholder: e.g. small VPS running a public API, enabled C1-C4 + C7 Forensic
+    validations:
+      required: true
+  - type: textarea
+    id: worked
+    attributes:
+      label: What worked well?
+      placeholder: e.g. caught a real scan attempt within minutes, forensic logs were clear
+    validations:
+      required: false
+  - type: textarea
+    id: missing
+    attributes:
+      label: What was missing or confusing?
+      placeholder: e.g. no detection for X attack pattern, docs unclear on Y setup step
+    validations:
+      required: false
+  - type: dropdown
+    id: production
+    attributes:
+      label: Would you run this in production, or recommend it to someone else?
+      options:
+        - "Yes — already running it in production"
+        - "Yes — would recommend, testing/staging only so far"
+        - "Not yet — needs more work first (explain below)"
+        - "No — doesn't fit our use case (explain below)"
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else you want us to know?
+      description: Numbers welcome — traffic volume, incidents caught, false positives, anything real
+      required: false
