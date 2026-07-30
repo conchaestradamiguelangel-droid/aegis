@@ -4,35 +4,33 @@ This roadmap reflects the current direction of AEGIS. Priorities are set by prod
 
 ---
 
-## v1.1 — Observability (Q3 2026)
+## v1.1 — Observability (Q3 2026) — shipped
 
-Planned issues — all open for contributors:
-
-- [ ] Grafana dashboard JSON for Prometheus `/metrics` ([#17](../../issues/17))
-- [ ] X-Request-ID tracing header across all status server responses ([#18](../../issues/18)) — *assigned*
-- [ ] Integration test suite for `/incidents` endpoint ([#16](../../issues/16))
-- [ ] README translated to English for non-Spanish contributors ([#15](../../issues/15)) — *assigned*
+- [x] Grafana dashboard JSON for Prometheus `/metrics` ([#17](../../issues/17))
+- [x] X-Request-ID tracing header across all status server responses ([#18](../../issues/18))
+- [x] Integration test suite for `/incidents` endpoint ([#16](../../issues/16))
+- [x] README translated to English for non-Spanish contributors ([#15](../../issues/15))
 
 ---
 
-## v1.2 — Intelligence Layer (Q4 2026)
+## v1.2 — Intelligence Layer (Q4 2026) — shipped
 
-Research and implementation — all open for contributors:
-
-- [ ] Low-and-slow / LOtL (Living-off-the-Land) detection in C8 ([#23](../../issues/23))
-- [ ] Forensic log integrity — append-only tamper detection in C7 ([#22](../../issues/22))
-- [ ] Supply chain integrity verification for AEGIS dependencies ([#21](../../issues/21))
-- [ ] Adversarial baseline poisoning detection in C8 Learning layer ([#20](../../issues/20))
-- [ ] Low-and-slow baseline drift alerting in C3 Detector ([#19](../../issues/19))
+- [x] Low-and-slow / LOtL (Living-off-the-Land) detection in C8 ([#23](../../issues/23))
+- [x] Forensic log integrity — append-only tamper detection in C7 ([#22](../../issues/22))
+- [x] Supply chain integrity verification for AEGIS dependencies ([#21](../../issues/21))
+- [x] Adversarial baseline poisoning detection in C8 Learning layer ([#20](../../issues/20))
+- [x] Low-and-slow baseline drift alerting in C3 Detector ([#19](../../issues/19))
 
 ---
 
 ## v1.3 — Integrations (Q4 2026)
 
+Open for contributors:
+
+- [ ] Webhook push for incident events ([#40](../../issues/40)) — *good first issue*
+- [ ] Syslog-ng / rsyslog adapter ([#41](../../issues/41)) — *good first issue*
 - [ ] Elasticsearch native export for SIEM platforms
-- [ ] Syslog-ng / rsyslog adapter
 - [ ] MISP threat intelligence feed integration
-- [ ] Webhook push for incident events
 
 ---
 
