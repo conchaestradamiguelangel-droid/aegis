@@ -76,6 +76,8 @@ Threat flow: Detection (C3) -> Atomic lockdown (C4) -> Twin jump (C1) -> Forensi
 | ML-DSA-87   | NIST FIPS 204 | Digital signatures        |
 | SPHINCS+    | NIST FIPS 205 | Hash-based signatures     |
 
+Need standalone ML-DSA-87 signing for your own Python project? We spun the signing layer out into [pqsign](https://github.com/pqsign/pqsign) — key rotation and FastAPI/Flask integration included.
+
 ---
 
 ## Key Properties
