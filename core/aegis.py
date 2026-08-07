@@ -47,6 +47,8 @@ from layers.forensic  import AegisForensic
 from layers.learning  import AegisLearning
 
 from integrations.telegram_alerts import TelegramAlerter, AlertConfig
+from integrations.webhook_alerts import WebhookAlerter, WebhookConfig
+from integrations.syslog_forwarder import SyslogForwarder, SyslogConfig
 from core.incident_reporter     import IncidentReporter
 from integrations.enlil_connector import EnlilConnector
 from core.persistence import CheckpointManager, AutoCheckpointer
@@ -384,6 +386,9 @@ class AegisSystem:
         telegram_chat_id: str   = None,
         enlil_url:        str   = None,
         enlil_api_key:    str   = None,
+        webhook_url:      str   = None,
+        syslog_host:      str   = None,
+        syslog_port:      int   = 514,
         state_dir:        str   = "state",
     ):
         self._id           = installation_id or f"AEGIS-{secrets.token_hex(4).upper()}"
@@ -449,6 +454,18 @@ class AegisSystem:
         if enlil_url and enlil_api_key:
             self._enlil = EnlilConnector(enlil_url, enlil_api_key)
             logger.info("[AEGIS] Integración ENLIL configurada ✓")
+
+        # ── Webhook genérico de incidentes (Discord/Slack/generic) ─────────────
+        self._webhook: Optional[WebhookAlerter] = None
+        if webhook_url:
+            self._webhook = WebhookAlerter(WebhookConfig(url=webhook_url))
+            logger.info("[AEGIS] Webhook de incidentes configurado ✓")
+
+        # ── Forwarder syslog-ng / rsyslog (RFC 5424, UDP) ───────────────────────
+        self._syslog: Optional[SyslogForwarder] = None
+        if syslog_host:
+            self._syslog = SyslogForwarder(SyslogConfig(host=syslog_host, port=syslog_port))
+            logger.info("[AEGIS] Forwarder syslog configurado ✓")
 
         self._timing_lockdown  = _TimingWindow()
         self._timing_detection = _TimingWindow()
@@ -599,6 +616,10 @@ class AegisSystem:
 
         # ── C7 → C8: Forense alimenta aprendizaje ────────────────────────────
         self.forensic.register_learning_callback(self.learning.ingest_profile)
+        if self._webhook:
+            self.forensic.register_learning_callback(self._webhook.on_incident_closed)
+        if self._syslog:
+            self.forensic.register_learning_callback(self._syslog.on_incident_closed)
 
         # ── C1 → sistema: salto notifica estado ──────────────────────────────
         self.twin.register_jump_callback(self._on_twin_jump)

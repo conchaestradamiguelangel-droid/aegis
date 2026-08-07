@@ -139,6 +139,9 @@ python main.py --daemon --mace
 | AEGIS_TG_CHAT       | Telegram chat ID         | No       |
 | AEGIS_ENLIL_TOKEN   | ENLIL orchestrator token | No       |
 | AEGIS_INCIDENTS_DIR | Path to incident reports | No       |
+| WEBHOOK_URL         | Push incident events (JSON POST) to Discord/Slack/generic webhook | No |
+| SYSLOG_HOST         | syslog-ng/rsyslog collector host (RFC 5424, UDP) for incident export | No |
+| SYSLOG_PORT         | syslog collector port (default 514) | No |
 
 ### Docker
 ```bash

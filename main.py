@@ -69,6 +69,15 @@ TELEGRAM_CHAT_ID = os.environ.get("AEGIS_TG_CHAT",    _arg("--tg-chat"))
 ENLIL_URL     = os.environ.get("AEGIS_ENLIL_URL",     "http://127.0.0.1:8002")
 ENLIL_API_KEY = os.environ.get("AEGIS_ENLIL_API_KEY")
 
+# ── Webhook genérico de incidentes (opcional, apagado por defecto) ────────────────────────────
+# Environment: WEBHOOK_URL="https://discord.com/api/webhooks/..." (o Slack, o genérico)
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+
+# ── Forwarder syslog-ng / rsyslog (opcional, apagado por defecto) ─────────────────────────────
+# Environment: SYSLOG_HOST="siem.example.com"  SYSLOG_PORT="514"
+SYSLOG_HOST = os.environ.get("SYSLOG_HOST")
+SYSLOG_PORT = int(os.environ.get("SYSLOG_PORT", "514"))
+
 # ─────────────────────────────────────────────
 # LOGGING
 # ─────────────────────────────────────────────
@@ -265,6 +274,9 @@ async def main():
         telegram_chat_id = TELEGRAM_CHAT_ID,
         enlil_url        = ENLIL_URL if ENLIL_API_KEY else None,
         enlil_api_key    = ENLIL_API_KEY,
+        webhook_url      = WEBHOOK_URL,
+        syslog_host      = SYSLOG_HOST,
+        syslog_port      = SYSLOG_PORT,
     )
 
     modo_shield = "CON escudo (Capa 0.5 activa)" if SHIELD_ENABLED else \
