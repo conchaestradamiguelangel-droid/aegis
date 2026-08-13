@@ -239,5 +239,11 @@ class AegisStatusServer:
                 'aegis_lockdown_latency_ms{quantile="0.99"} ' + str(lkd_t.get("p99") or 0),
             ]
             return web.Response(text=sep.join(lines) + sep, content_type="text/plain", charset="utf-8")
-        except Exception as e:
-            return web.Response(text="# ERROR " + str(e) + chr(10), status=500, content_type="text/plain")
+        except Exception:
+            req_id = request.get("request_id", "")
+            logger.exception(f"[{req_id}] Error generando /metrics")
+            return web.Response(
+                text="# ERROR generando metricas -- ver logs (request_id={})".format(req_id) + chr(10),
+                status=500,
+                content_type="text/plain",
+            )
