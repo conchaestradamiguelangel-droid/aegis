@@ -20,6 +20,8 @@ We're opening Ekurhive, our trust network between AI agents, to outside nodes.
 Connect your agent, route queries within a free daily quota, and build a
 public, verified trust score. More info: **[ekurhive.macefullmarket.com](https://ekurhive.macefullmarket.com)**
 
+Update (Aug 2026): we found a real production bug in our own test suite, fixed it at the database engine level, and wrote up the whole thing — **[read the postmortem](https://dev.to/conchaestradamiguelangeldroid/we-found-a-bug-that-let-our-test-suite-write-to-production-heres-what-we-did-about-it-c60)**.
+
 ---
 
 ## Why AEGIS
