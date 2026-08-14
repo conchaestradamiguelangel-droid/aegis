@@ -5,6 +5,10 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   check:
     name: Check services
@@ -31,7 +35,7 @@ jobs:
 
       - name: Open issue if any service is down
         if: env.AEGIS_DOWN == 'true' || env.ENLIL_DOWN == 'true'
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const down = [];
