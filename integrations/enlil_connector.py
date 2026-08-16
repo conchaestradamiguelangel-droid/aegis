@@ -14,6 +14,13 @@ logger = logging.getLogger("aegis.enlil")
 
 _SEVERITY_TO_TIER = {"low": "standard", "medium": "standard", "high": "full", "critical": "full"}
 
+# Tipos de detección que NO se envían al Consejo de ENLIL.
+# AUTOMATED (velocidad de bot/script) es ruido de fondo rutinario de
+# cualquier VPS público — AEGIS ya decide y ejecuta LOCKDOWN de forma
+# autónoma sin esperar al Consejo. Enviarlo consumía el tier más caro
+# (9 dioses + Marduk) para tráfico que no requiere deliberación multi-IA.
+_SKIP_ENLIL_TYPES = {"AUTOMATED"}
+
 
 class EnlilConnector:
     """Envía alertas AEGIS al orquestador ENLIL para análisis multi-IA."""
@@ -46,7 +53,11 @@ class EnlilConnector:
 
     async def on_threat_detected(self, detection) -> None:
         """Envía detección a ENLIL en background — no bloquea AEGIS."""
-        dtype      = detection.detection_type.value if hasattr(detection.detection_type, "value") else str(detection.detection_type)
+        dtype = detection.detection_type.value if hasattr(detection.detection_type, "value") else str(detection.detection_type)
+        if dtype in _SKIP_ENLIL_TYPES:
+            logger.debug(f"[ENLIL] Detección tipo={dtype} omitida — ruido rutinario, AEGIS ya actúa solo")
+            return
+
         confidence = detection.confidence.value if hasattr(detection.confidence, "value") else str(detection.confidence)
         source_ip  = list(detection.source_ips)[0] if detection.source_ips else "desconocida"
         severity   = _confidence_to_severity(confidence)

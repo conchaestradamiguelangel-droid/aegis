@@ -260,6 +260,21 @@ async def t_activo_deteccion_automatizacion():
     automated = [d for d in received if d.detection_type == DetectionType.AUTOMATED]
     assert len(automated) >= 1
 
+async def t_activo_un_solo_evento_no_dispara_automatizacion():
+    """Un único evento no debe disparar AUTOMATED — no hay base para medir una tasa.
+
+    Regresión: antes, la primera petición de una IP nueva (elapsed ≈ 0)
+    producía tasas absurdas (decenas de miles de req/s) a partir de 1 solo
+    evento, disparando AUTOMATED sobre tráfico normal de una sola visita.
+    """
+    received = []
+    async def cb(d): received.append(d)
+    agent = ActiveAgent(on_detection=cb)
+    agent.AUTOMATION_RPS_THRESHOLD = 5.0
+    await agent.register_event(IP_A, 8080, "/solo-una-vez")
+    automated = [d for d in received if d.detection_type == DetectionType.AUTOMATED]
+    assert len(automated) == 0, f"1 solo evento no debería generar AUTOMATED, generó {len(automated)}"
+
 async def t_activo_deteccion_coordinacion():
     """Múltiples IPs activas simultáneamente → coordinación."""
     received = []
@@ -293,6 +308,7 @@ async def t_activo_coordinacion_multiples_ips():
         assert len(coordinated[0].source_ips) >= 2
 
 test("AUTOMATIZACIÓN — Ráfaga genera detección AUTOMATED", t_activo_deteccion_automatizacion)
+test("AUTOMATIZACIÓN — 1 solo evento NO genera detección (regresión)", t_activo_un_solo_evento_no_dispara_automatizacion)
 test("COORDINACIÓN — Múltiples IPs generan detección COORDINATED", t_activo_deteccion_coordinacion)
 test("COORDINACIÓN — Detección incluye todas las IPs", t_activo_coordinacion_multiples_ips)
 

@@ -132,6 +132,12 @@ class IPProfile:
         if port:
             self.ports_touched.add(port)
 
+    # Una "tasa" no se puede medir con un solo dato. Sin este mínimo, una IP
+    # vista por primera vez (elapsed ≈ 0, 1 sola petición) produce tasas
+    # absurdas (p.ej. 45.000 req/s) por división entre un intervalo casi
+    # nulo — no es automatización real, es un artefacto de medir con n=1.
+    _MIN_EVENTS_FOR_RATE = 2
+
     def requests_per_second(self, window: float = 10.0) -> float:
         """Calculate the request rate for this IP over a sliding time window.
 
@@ -139,11 +145,15 @@ class IPProfile:
             window: Time window in seconds to measure the rate over.
 
         Returns:
-            float: Average requests per second within *window*.
+            float: Average requests per second within *window*, or 0.0 if
+                fewer than _MIN_EVENTS_FOR_RATE requests have been observed
+                (no hay base suficiente para estimar una tasa).
         """
         now    = time.monotonic()
         cutoff = now - window
         recent = sum(1 for t in self.request_times if t > cutoff)
+        if recent < self._MIN_EVENTS_FOR_RATE:
+            return 0.0
         elapsed = min(window, now - self.first_seen)
         return recent / elapsed if elapsed > 0 else 0.0
 
