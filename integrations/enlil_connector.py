@@ -7,6 +7,7 @@ Fire-and-forget — nunca bloquea el flujo defensivo de AEGIS.
 import asyncio
 import json
 import logging
+import os
 import urllib.request
 from typing import Optional
 
@@ -28,6 +29,18 @@ class EnlilConnector:
     def __init__(self, enlil_url: str, api_key: str):
         self._url     = enlil_url.rstrip("/") + "/query"
         self._api_key = api_key
+        # Interruptor manual del bridge — apagado por defecto (decisión 16/08/2026).
+        # AEGIS ya defiende en solitario (lockdown, minefield, etc. no dependen de
+        # ENLIL); el bridge solo añade un informe deliberado por el Consejo, y
+        # dejarlo en automático disparó gasto real no controlado en OpenRouter
+        # (~$28 entre el 6 y el 11 de agosto). Nadie consulta al Consejo salvo
+        # que se active explícitamente. Para reactivarlo: ENLIL_BRIDGE_ENABLED=true
+        # en el .env de AEGIS + reinicio del servicio.
+        self._enabled = os.environ.get("ENLIL_BRIDGE_ENABLED", "false").strip().lower() == "true"
+        if self._enabled:
+            logger.info("[ENLIL] Bridge ACTIVADO — las detecciones se enviarán al Consejo")
+        else:
+            logger.info("[ENLIL] Bridge DESACTIVADO — ninguna detección se envía al Consejo (ENLIL_BRIDGE_ENABLED=false)")
 
     def _post_sync(self, payload: dict) -> Optional[dict]:
         body = json.dumps(payload).encode("utf-8")
@@ -53,6 +66,9 @@ class EnlilConnector:
 
     async def on_threat_detected(self, detection) -> None:
         """Envía detección a ENLIL en background — no bloquea AEGIS."""
+        if not self._enabled:
+            return
+
         dtype = detection.detection_type.value if hasattr(detection.detection_type, "value") else str(detection.detection_type)
         if dtype in _SKIP_ENLIL_TYPES:
             logger.debug(f"[ENLIL] Detección tipo={dtype} omitida — ruido rutinario, AEGIS ya actúa solo")
