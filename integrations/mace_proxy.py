@@ -74,6 +74,84 @@ def _peer_is_trusted(peer_ip: str, trusted_networks: frozenset) -> bool:
     return any(ip in net for net in trusted_networks)
 
 
+def _normalize_ip(raw: str) -> Optional[str]:
+    """
+    Valida una entrada de X-Forwarded-For como IPv4/IPv6 pura y la
+    normaliza a su forma canónica (para que representaciones
+    equivalentes, ej. "::1" y "0:0:0:0:0:0:0:1", resuelvan a la misma
+    identidad). Devuelve None para cualquier cosa que no sea
+    exactamente una IP: texto arbitrario, CIDR, IP con puerto, vacío.
+
+    Las IPv6 "IPv4-mapped" (::ffff:a.b.c.d, rango ::ffff:0:0/96) se
+    desenvuelven a su IPv4Address equivalente ANTES de canonicalizar
+    y de cualquier comprobación de loopback/unspecified posterior en
+    _resolve_client_ip. Verificado empíricamente en este runtime
+    (Python 3.12.3): ni IPv6Address("::ffff:127.0.0.1").is_loopback
+    ni IPv6Address("::ffff:0.0.0.0").is_unspecified detectan el caso
+    mapeado (ambos dan False) — sin este desenvolvimiento, "8.8.8.8"
+    y "::ffff:8.8.8.8" serían identidades distintas para
+    blocklist/whitelist, y "::ffff:127.0.0.1"/"::ffff:0.0.0.0" se
+    colarían como si no fuesen loopback/unspecified.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        ip_obj = ipaddress.ip_address(raw)
+    except ValueError:
+        return None
+    mapped = getattr(ip_obj, "ipv4_mapped", None)
+    if mapped is not None:
+        ip_obj = mapped
+    return str(ip_obj)
+
+
+def _resolve_client_ip(
+    peer_ip: str, forwarded_header: str, trusted_networks: frozenset
+) -> str:
+    """
+    Deriva la IP real del cliente. Nunca "el primer valor de
+    X-Forwarded-For, siempre" (hallazgo de seguimiento 2026-08-29):
+    un proxy bien comportado (nginx `$proxy_add_x_forwarded_for`,
+    HAProxy, etc.) AÑADE el peer que le conecta al FINAL de la
+    cabecera — nunca lo antepone. Cualquier valor que el propio
+    cliente haya podido meter de su mano en X-Forwarded-For queda
+    siempre a la izquierda de lo que el proxy confiable añadió.
+
+    Si el peer TCP directo no es un proxy en AEGIS_TRUSTED_PROXIES,
+    X-Forwarded-For se ignora por completo.
+
+    Si lo es, se recorre la cabecera de derecha a izquierda, saltando
+    entradas que sean a su vez otros proxies confiables (soporta una
+    cadena de varios saltos confiables), hasta la primera entrada que
+    no lo sea — esa es la IP del cliente. Se rechaza todo el intento
+    (fallback a la IP TCP real) ante:
+      - una entrada malformada, con puerto o en formato CIDR en la
+        posición evaluada (no hay forma segura de seguir confiando
+        en el resto de la cadena);
+      - que esa primera entrada no confiable resulte ser loopback o
+        no especificada (127.0.0.1 / ::1 / 0.0.0.0 inyectada, para
+        que nadie pueda reclamar la identidad exenta de bloqueo);
+      - una cabecera vacía o compuesta solo por proxies confiables.
+    """
+    if not _peer_is_trusted(peer_ip, trusted_networks):
+        return peer_ip
+
+    raw_entries = (forwarded_header or "").split(",")
+    for raw_entry in reversed(raw_entries):
+        candidate = _normalize_ip(raw_entry)
+        if candidate is None:
+            return peer_ip
+        if _peer_is_trusted(candidate, trusted_networks):
+            continue
+        ip_obj = ipaddress.ip_address(candidate)
+        if ip_obj.is_loopback or ip_obj.is_unspecified:
+            return peer_ip
+        return candidate
+
+    return peer_ip
+
+
 # ─────────────────────────────────────────────
 # BLOCKLIST — IPs bloqueadas temporalmente
 # ─────────────────────────────────────────────
@@ -475,23 +553,17 @@ class MaceProxy:
 
     def _get_client_ip(self, request: web.Request) -> str:
         """
-        Extrae la IP real del cliente.
-
-        X-Forwarded-For solo se respeta si la conexión TCP entrante
-        (request.remote) procede de un proxy en AEGIS_TRUSTED_PROXIES.
-        Cualquier otro peer no puede fijar esa cabecera para suplantar
-        su IP ni para forzar el bloqueo de una IP ajena — se usa
-        siempre su IP TCP real.
+        Extrae la IP real del cliente. Ver `_resolve_client_ip` para la
+        política exacta (nunca "primer valor de X-Forwarded-For,
+        siempre" — se toma el primer valor no confiable recorriendo
+        la cadena de derecha a izquierda).
         """
         peer_ip = request.remote or "0.0.0.0"
-        if not _peer_is_trusted(peer_ip, self._trusted_proxies):
-            return peer_ip
-        forwarded = request.headers.get("X-Forwarded-For", "")
-        if forwarded:
-            candidate = forwarded.split(",")[0].strip()
-            if candidate:
-                return candidate
-        return peer_ip
+        return _resolve_client_ip(
+            peer_ip,
+            request.headers.get("X-Forwarded-For", ""),
+            self._trusted_proxies,
+        )
 
     # ── Consultas ─────────────────────────────────────────────────────────────
 

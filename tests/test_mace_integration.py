@@ -305,7 +305,188 @@ print("\n═══════════════════════�
 print("  MACE — Bloque 3.5: X-Forwarded-For / trusted proxies")
 print("═══════════════════════════════════════════════")
 
-from integrations.mace_proxy import _parse_trusted_proxies, _peer_is_trusted
+import ipaddress
+
+from integrations.mace_proxy import (
+    _parse_trusted_proxies,
+    _peer_is_trusted,
+    _normalize_ip,
+    _resolve_client_ip,
+)
+
+
+# ── Unitarios puros de _normalize_ip / _resolve_client_ip (sin red) ────────
+
+def t_normalize_ip_rechaza_formatos_invalidos():
+    """CIDR, IP con puerto, texto arbitrario, vacío y octeto con cero
+    ambiguo (010.x, ataque de normalización clásico) se rechazan."""
+    assert _normalize_ip("10.0.0.0/8") is None
+    assert _normalize_ip("6.6.6.6:1234") is None
+    assert _normalize_ip("[::1]:1234") is None
+    assert _normalize_ip("not-an-ip") is None
+    assert _normalize_ip("") is None
+    assert _normalize_ip("   ") is None
+    assert _normalize_ip("010.0.0.1") is None  # octeto ambiguo, Python lo rechaza
+
+
+def t_normalize_ip_normaliza_ipv4_ipv6_validas():
+    assert _normalize_ip(" 203.0.113.9 ") == "203.0.113.9"
+    assert _normalize_ip("2001:db8::1") == "2001:db8::1"
+    # forma expandida y comprimida deben normalizar a la misma identidad
+    assert _normalize_ip("2001:0db8:0000:0000:0000:0000:0000:0001") == "2001:db8::1"
+
+
+def t_normalize_ip_desenvuelve_ipv4_mapped_loopback():
+    """
+    ::ffff:127.0.0.1 debe desenvolverse a 127.0.0.1 — verificado
+    empíricamente que IPv6Address("::ffff:127.0.0.1").is_loopback da
+    False en este runtime, así que sin desenvolver primero, esta
+    forma se colaría como si no fuese loopback.
+    """
+    assert _normalize_ip("::ffff:127.0.0.1") == "127.0.0.1"
+
+
+def t_normalize_ip_desenvuelve_ipv4_mapped_unspecified():
+    """::ffff:0.0.0.0 debe desenvolverse a 0.0.0.0 (mismo motivo que arriba, con is_unspecified)."""
+    assert _normalize_ip("::ffff:0.0.0.0") == "0.0.0.0"
+
+
+def t_normalize_ip_desenvuelve_ipv4_mapped_publica():
+    """Una IPv4 pública mapeada también se desenvuelve, no solo los casos especiales."""
+    assert _normalize_ip("::ffff:8.8.8.8") == "8.8.8.8"
+
+
+def t_normalize_ip_ipv4_mapped_y_ipv4_normal_misma_identidad():
+    """
+    El requisito central: una IPv4 normal y su equivalente
+    IPv4-mapped IPv6 deben producir EXACTAMENTE la misma cadena — si
+    no, "8.8.8.8" y "::ffff:8.8.8.8" serían dos identidades distintas
+    para blocklist/whitelist (evasión de bloqueo por disfraz de
+    protocolo).
+    """
+    assert _normalize_ip("8.8.8.8") == _normalize_ip("::ffff:8.8.8.8") == "8.8.8.8"
+
+
+def t_resolve_client_ip_toma_el_ultimo_no_el_primero():
+    """
+    Regresión directa del hallazgo P0 (2026-08-29): con un proxy
+    confiable delante, la IP del cliente es la que ese proxy AÑADIÓ al
+    final de la cadena — no lo que el propio cliente pudo anteponer.
+    """
+    trusted = frozenset({ipaddress.ip_network("203.0.113.1/32")})
+    resolved = _resolve_client_ip(
+        peer_ip           = "203.0.113.1",
+        forwarded_header  = "6.6.6.6, 203.0.113.1, 198.51.100.7",
+        trusted_networks  = trusted,
+    )
+    assert resolved == "198.51.100.7", (
+        f"debía tomar el último valor no confiable, tomó: {resolved!r}"
+    )
+
+
+def t_resolve_client_ip_cadena_multisalto_confiable():
+    """Con 2 proxies confiables encadenados, salta ambos y llega al cliente real."""
+    hop_a  = ipaddress.ip_network("10.0.0.1/32")
+    hop_b  = ipaddress.ip_network("10.0.0.2/32")
+    trusted = frozenset({hop_a, hop_b})
+    resolved = _resolve_client_ip(
+        peer_ip          = "10.0.0.2",                 # hop_b es nuestro peer directo
+        forwarded_header = "198.51.100.7, 10.0.0.1",    # cliente real, luego hop_a
+        trusted_networks = trusted,
+    )
+    assert resolved == "198.51.100.7"
+
+
+def t_resolve_client_ip_solo_proxies_confiables_cae_a_peer():
+    """Si toda la cadena son proxies confiables (sin cliente real detrás), fallback seguro."""
+    hop_a = ipaddress.ip_network("10.0.0.1/32")
+    trusted = frozenset({hop_a})
+    resolved = _resolve_client_ip(
+        peer_ip          = "10.0.0.1",
+        forwarded_header = "10.0.0.1",
+        trusted_networks = trusted,
+    )
+    assert resolved == "10.0.0.1"
+
+
+def t_resolve_client_ip_entrada_malformada_cae_a_peer():
+    trusted = frozenset({ipaddress.ip_network("203.0.113.1/32")})
+    resolved = _resolve_client_ip(
+        peer_ip          = "203.0.113.1",
+        forwarded_header = "6.6.6.6, not-an-ip",
+        trusted_networks = trusted,
+    )
+    assert resolved == "203.0.113.1"
+
+
+def t_resolve_client_ip_ip_con_puerto_rechazada():
+    trusted = frozenset({ipaddress.ip_network("203.0.113.1/32")})
+    resolved = _resolve_client_ip(
+        peer_ip          = "203.0.113.1",
+        forwarded_header = "6.6.6.6:1234",
+        trusted_networks = trusted,
+    )
+    assert resolved == "203.0.113.1"
+
+
+def t_resolve_client_ip_cidr_rechazado():
+    trusted = frozenset({ipaddress.ip_network("203.0.113.1/32")})
+    resolved = _resolve_client_ip(
+        peer_ip          = "203.0.113.1",
+        forwarded_header = "10.0.0.0/8",
+        trusted_networks = trusted,
+    )
+    assert resolved == "203.0.113.1"
+
+
+def t_resolve_client_ip_loopback_ipv4_inyectado_no_se_acepta():
+    trusted = frozenset({ipaddress.ip_network("203.0.113.1/32")})
+    resolved = _resolve_client_ip(
+        peer_ip          = "203.0.113.1",
+        forwarded_header = "127.0.0.1",
+        trusted_networks = trusted,
+    )
+    assert resolved == "203.0.113.1", (
+        f"127.0.0.1 inyectada no debe aceptarse como identidad del cliente: {resolved!r}"
+    )
+
+
+def t_resolve_client_ip_loopback_ipv6_inyectado_no_se_acepta():
+    trusted = frozenset({ipaddress.ip_network("203.0.113.1/32")})
+    resolved = _resolve_client_ip(
+        peer_ip          = "203.0.113.1",
+        forwarded_header = "::1",
+        trusted_networks = trusted,
+    )
+    assert resolved == "203.0.113.1", (
+        f"::1 inyectada no debe aceptarse como identidad del cliente: {resolved!r}"
+    )
+
+
+def t_resolve_client_ip_loopback_ipv4_mapped_inyectado_no_se_acepta():
+    """::ffff:127.0.0.1 debe rechazarse igual que 127.0.0.1 (disfraz IPv4-mapped)."""
+    trusted = frozenset({ipaddress.ip_network("203.0.113.1/32")})
+    resolved = _resolve_client_ip(
+        peer_ip          = "203.0.113.1",
+        forwarded_header = "::ffff:127.0.0.1",
+        trusted_networks = trusted,
+    )
+    assert resolved == "203.0.113.1", (
+        f"::ffff:127.0.0.1 inyectada no debe aceptarse: {resolved!r}"
+    )
+
+
+def t_resolve_client_ip_unspecified_ipv4_mapped_inyectado_no_se_acepta():
+    """::ffff:0.0.0.0 debe rechazarse igual que 0.0.0.0."""
+    trusted = frozenset({ipaddress.ip_network("203.0.113.1/32")})
+    resolved = _resolve_client_ip(
+        peer_ip          = "203.0.113.1",
+        forwarded_header = "::ffff:0.0.0.0",
+        trusted_networks = trusted,
+    )
+    assert resolved == "203.0.113.1", (
+        f"::ffff:0.0.0.0 inyectada no debe aceptarse: {resolved!r}"
+    )
 
 
 def t_parse_trusted_proxies_ignora_entradas_invalidas():
@@ -441,6 +622,92 @@ async def t_xff_confiado_solo_desde_proxy_configurado():
     )
 
 
+async def t_xff_cadena_multiple_toma_ultimo_valor():
+    """
+    Extremo a extremo: con un proxy confiable delante y una cabecera
+    de varios valores (cliente antepone un decoy, el proxy añade el
+    suyo al final), MACE debe ver el ÚLTIMO valor — no el primero.
+    """
+    fake_runner, hits = await _start_fake_mace(19018)
+    proxy = MaceProxy(
+        target_url      = "http://127.0.0.1:19018",
+        listen_port     = 18918,
+        trusted_proxies = "127.0.0.1",
+    )
+    await proxy.start()
+    await asyncio.sleep(0.1)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.get(
+                "http://127.0.0.1:18918/check",
+                headers={"X-Forwarded-For": "6.6.6.6, 203.0.113.9"},
+            )
+    finally:
+        await proxy.stop()
+        await fake_runner.cleanup()
+
+    assert len(hits) == 1
+    assert hits[0]["ip"] == "203.0.113.9", (
+        f"debía tomar el último valor (203.0.113.9), tomó: {hits[0]['ip']!r}"
+    )
+
+
+async def t_xff_decoy_prefix_no_evade_bloqueo():
+    """
+    Un cliente detrás de un proxy confiable no puede anteponer una IP
+    limpia a la cabecera para que la IP bloqueada de verdad (la que el
+    proxy añadió) se cuele sin más como si fuera otra.
+    """
+    fake_runner, hits = await _start_fake_mace(19019)
+    proxy = MaceProxy(
+        target_url      = "http://127.0.0.1:19019",
+        listen_port     = 18919,
+        trusted_proxies = "127.0.0.1",
+    )
+    await proxy.start()
+    await asyncio.sleep(0.1)
+    proxy.blocklist.block("203.0.113.9", ttl_s=60)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "http://127.0.0.1:18919/secret",
+                headers={"X-Forwarded-For": "1.2.3.4, 203.0.113.9"},
+            ) as resp:
+                assert resp.status == 403
+    finally:
+        await proxy.stop()
+        await fake_runner.cleanup()
+
+    assert len(hits) == 0, "el decoy en el prefijo evadió el bloqueo"
+
+
+async def t_xff_ipv6_valido_se_reenvia():
+    """Una IP cliente IPv6 legítima (aportada por el proxy confiable) se respeta."""
+    fake_runner, hits = await _start_fake_mace(19020)
+    proxy = MaceProxy(
+        target_url      = "http://127.0.0.1:19020",
+        listen_port     = 18920,
+        trusted_proxies = "127.0.0.1",
+    )
+    await proxy.start()
+    await asyncio.sleep(0.1)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.get(
+                "http://127.0.0.1:18920/check",
+                headers={"X-Forwarded-For": "2001:db8::1"},
+            )
+    finally:
+        await proxy.stop()
+        await fake_runner.cleanup()
+
+    assert len(hits) == 1
+    assert hits[0]["ip"] == "2001:db8::1"
+
+
 test("XFF — Entradas inválidas en AEGIS_TRUSTED_PROXIES no rompen el arranque",
      t_parse_trusted_proxies_ignora_entradas_invalidas)
 test("XFF — Sin configurar, ningún peer es confiable",
@@ -453,6 +720,44 @@ test("XFF — IP bloqueada no evade el bloqueo reetiquetándose vía XFF",
      t_xff_spoofing_no_evade_bloqueo)
 test("XFF — Con proxy confiable configurado, XFF sí se respeta",
      t_xff_confiado_solo_desde_proxy_configurado)
+test("XFF — _normalize_ip rechaza CIDR/puerto/texto/vacío/octeto ambiguo",
+     t_normalize_ip_rechaza_formatos_invalidos)
+test("XFF — _normalize_ip normaliza IPv4/IPv6 (incl. formas equivalentes)",
+     t_normalize_ip_normaliza_ipv4_ipv6_validas)
+test("XFF — _normalize_ip desenvuelve ::ffff:127.0.0.1 a 127.0.0.1",
+     t_normalize_ip_desenvuelve_ipv4_mapped_loopback)
+test("XFF — _normalize_ip desenvuelve ::ffff:0.0.0.0 a 0.0.0.0",
+     t_normalize_ip_desenvuelve_ipv4_mapped_unspecified)
+test("XFF — _normalize_ip desenvuelve IPv4 pública mapeada (::ffff:8.8.8.8)",
+     t_normalize_ip_desenvuelve_ipv4_mapped_publica)
+test("XFF — 8.8.8.8 y ::ffff:8.8.8.8 son la misma identidad",
+     t_normalize_ip_ipv4_mapped_y_ipv4_normal_misma_identidad)
+test("XFF — _resolve_client_ip toma el último valor, no el primero (P0)",
+     t_resolve_client_ip_toma_el_ultimo_no_el_primero)
+test("XFF — _resolve_client_ip soporta cadena de varios proxies confiables",
+     t_resolve_client_ip_cadena_multisalto_confiable)
+test("XFF — _resolve_client_ip cae al peer si toda la cadena es confiable",
+     t_resolve_client_ip_solo_proxies_confiables_cae_a_peer)
+test("XFF — _resolve_client_ip cae al peer ante entrada malformada",
+     t_resolve_client_ip_entrada_malformada_cae_a_peer)
+test("XFF — _resolve_client_ip rechaza IP con puerto",
+     t_resolve_client_ip_ip_con_puerto_rechazada)
+test("XFF — _resolve_client_ip rechaza CIDR",
+     t_resolve_client_ip_cidr_rechazado)
+test("XFF — _resolve_client_ip rechaza 127.0.0.1 inyectada",
+     t_resolve_client_ip_loopback_ipv4_inyectado_no_se_acepta)
+test("XFF — _resolve_client_ip rechaza ::1 inyectada",
+     t_resolve_client_ip_loopback_ipv6_inyectado_no_se_acepta)
+test("XFF — _resolve_client_ip rechaza ::ffff:127.0.0.1 inyectada",
+     t_resolve_client_ip_loopback_ipv4_mapped_inyectado_no_se_acepta)
+test("XFF — _resolve_client_ip rechaza ::ffff:0.0.0.0 inyectada",
+     t_resolve_client_ip_unspecified_ipv4_mapped_inyectado_no_se_acepta)
+test("XFF — Cadena con varios valores toma el último (E2E, P0)",
+     t_xff_cadena_multiple_toma_ultimo_valor)
+test("XFF — Decoy en el prefijo no evade un bloqueo existente (E2E)",
+     t_xff_decoy_prefix_no_evade_bloqueo)
+test("XFF — IPv6 válida aportada por proxy confiable se respeta (E2E)",
+     t_xff_ipv6_valido_se_reenvia)
 
 
 # ─────────────────────────────────────────────
