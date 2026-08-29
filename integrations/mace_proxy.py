@@ -20,7 +20,9 @@ DISEÑO:
 """
 
 import asyncio
+import ipaddress
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional, Callable, Set
@@ -32,6 +34,44 @@ logger = logging.getLogger("aegis.mace.proxy")
 
 # IPs que nunca se bloquean — el watchdog usa 127.0.0.1 para health checks
 LOOPBACK_WHITELIST: frozenset[str] = frozenset({"127.0.0.1", "::1"})
+
+
+# ─────────────────────────────────────────────
+# PROXIES CONFIABLES — quién puede fijar X-Forwarded-For
+# ─────────────────────────────────────────────
+#
+# Por defecto (sin AEGIS_TRUSTED_PROXIES configurado) NINGÚN peer es
+# confiable: X-Forwarded-For se ignora siempre y se usa la IP TCP real
+# de la conexión. Esto es deliberado — un cliente arbitrario no debe
+# poder suplantar su IP ni forzar el bloqueo de una IP ajena solo
+# fijando esa cabecera. Configurar AEGIS_TRUSTED_PROXIES únicamente si
+# MaceProxy corre detrás de un reverse proxy propio (nginx, HAProxy...)
+# que sobrescribe X-Forwarded-For con la IP real del cliente.
+
+def _parse_trusted_proxies(raw: str) -> frozenset:
+    """Convierte 'ip_o_cidr,ip_o_cidr,...' en un frozenset de redes IP."""
+    networks = set()
+    for item in (raw or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            networks.add(ipaddress.ip_network(item, strict=False))
+        except ValueError:
+            logger.warning(
+                f"[PROXY] AEGIS_TRUSTED_PROXIES: entrada inválida ignorada: {item!r}"
+            )
+    return frozenset(networks)
+
+
+def _peer_is_trusted(peer_ip: str, trusted_networks: frozenset) -> bool:
+    if not trusted_networks:
+        return False
+    try:
+        ip = ipaddress.ip_address(peer_ip)
+    except ValueError:
+        return False
+    return any(ip in net for net in trusted_networks)
 
 
 # ─────────────────────────────────────────────
@@ -205,6 +245,7 @@ class MaceProxy:
         on_request:   Optional[Callable] = None,
         blocklist:    Optional[Blocklist] = None,
         timeout_s:    float    = 30.0,
+        trusted_proxies: Optional[str] = None,
     ):
         self._target      = target_url.rstrip("/")
         self._listen_host = listen_host
@@ -213,6 +254,24 @@ class MaceProxy:
         self._blocklist   = blocklist or Blocklist()
         self._timeout     = aiohttp.ClientTimeout(total=timeout_s)
         self._stats       = ProxyStats()
+
+        # X-Forwarded-For solo se confía si el peer TCP está en esta lista.
+        # trusted_proxies explícito > env AEGIS_TRUSTED_PROXIES > ninguno.
+        raw_trusted = (
+            trusted_proxies if trusted_proxies is not None
+            else os.environ.get("AEGIS_TRUSTED_PROXIES", "")
+        )
+        self._trusted_proxies = _parse_trusted_proxies(raw_trusted)
+        if self._trusted_proxies:
+            logger.info(
+                "[PROXY] X-Forwarded-For confiado solo desde: "
+                + ", ".join(sorted(str(n) for n in self._trusted_proxies))
+            )
+        else:
+            logger.info(
+                "[PROXY] AEGIS_TRUSTED_PROXIES no configurado — "
+                "X-Forwarded-For se ignora, se usa la IP TCP real del cliente"
+            )
         self._session:    Optional[aiohttp.ClientSession] = None
         self._runner:     Optional[web.AppRunner]         = None
         self._site:       Optional[web.TCPSite]           = None
@@ -307,7 +366,7 @@ class MaceProxy:
         """Procesa cada petición entrante."""
         self._stats.requests_total += 1
 
-        # IP real del cliente (respeta X-Forwarded-For si existe)
+        # IP real del cliente (X-Forwarded-For solo si el peer es confiable)
         client_ip = self._get_client_ip(request)
         path      = request.path
         method    = request.method
@@ -414,13 +473,25 @@ class MaceProxy:
 
     # ── Utilidades ────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _get_client_ip(request: web.Request) -> str:
-        """Extrae la IP real del cliente."""
+    def _get_client_ip(self, request: web.Request) -> str:
+        """
+        Extrae la IP real del cliente.
+
+        X-Forwarded-For solo se respeta si la conexión TCP entrante
+        (request.remote) procede de un proxy en AEGIS_TRUSTED_PROXIES.
+        Cualquier otro peer no puede fijar esa cabecera para suplantar
+        su IP ni para forzar el bloqueo de una IP ajena — se usa
+        siempre su IP TCP real.
+        """
+        peer_ip = request.remote or "0.0.0.0"
+        if not _peer_is_trusted(peer_ip, self._trusted_proxies):
+            return peer_ip
         forwarded = request.headers.get("X-Forwarded-For", "")
         if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.remote or "0.0.0.0"
+            candidate = forwarded.split(",")[0].strip()
+            if candidate:
+                return candidate
+        return peer_ip
 
     # ── Consultas ─────────────────────────────────────────────────────────────
 

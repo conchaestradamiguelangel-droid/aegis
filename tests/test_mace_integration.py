@@ -294,6 +294,168 @@ test("REENVÍO — 502 si MACE no responde",          t_proxy_retorna_502_si_mac
 
 
 # ─────────────────────────────────────────────
+# BLOQUE 3.5 — PROXY: X-FORWARDED-FOR / TRUSTED PROXIES
+# Regresión del hallazgo de seguridad P0 (auditoría 2026-08-29):
+# un cliente arbitrario no debe poder suplantar su IP ni evadir un
+# bloqueo fijando X-Forwarded-For, salvo que el peer TCP esté en
+# AEGIS_TRUSTED_PROXIES.
+# ─────────────────────────────────────────────
+
+print("\n═══════════════════════════════════════════════")
+print("  MACE — Bloque 3.5: X-Forwarded-For / trusted proxies")
+print("═══════════════════════════════════════════════")
+
+from integrations.mace_proxy import _parse_trusted_proxies, _peer_is_trusted
+
+
+def t_parse_trusted_proxies_ignora_entradas_invalidas():
+    """Entradas no-IP se descartan sin romper el arranque."""
+    nets = _parse_trusted_proxies("not-an-ip, 10.0.0.0/8, , 192.168.1.5")
+    assert len(nets) == 2
+    assert _peer_is_trusted("10.1.2.3", nets) is True
+    assert _peer_is_trusted("192.168.1.5", nets) is True
+    assert _peer_is_trusted("11.1.2.3", nets) is False
+    assert _peer_is_trusted("also-not-an-ip", nets) is False
+
+
+def t_peer_is_trusted_sin_config_siempre_false():
+    """Sin AEGIS_TRUSTED_PROXIES, ningún peer es confiable."""
+    assert _peer_is_trusted("127.0.0.1", frozenset()) is False
+
+
+async def t_xff_no_confiado_usa_ip_tcp_real():
+    """
+    Sin trusted_proxies configurado, un cliente normal que envía
+    X-Forwarded-For no consigue que el proxy reenvíe esa IP falsa —
+    debe usarse siempre la IP TCP real (peer).
+    """
+    fake_runner, hits = await _start_fake_mace(19014)
+    proxy = MaceProxy(
+        target_url  = "http://127.0.0.1:19014",
+        listen_port = 18914,
+    )
+    await proxy.start()
+    await asyncio.sleep(0.1)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.get(
+                "http://127.0.0.1:18914/check",
+                headers={"X-Forwarded-For": "6.6.6.6"},
+            )
+    finally:
+        await proxy.stop()
+        await fake_runner.cleanup()
+
+    assert len(hits) == 1
+    assert hits[0]["ip"] == "127.0.0.1", (
+        f"esperaba la IP TCP real, llegó la XFF falsa: {hits[0]['ip']!r}"
+    )
+
+
+async def t_xff_spoofing_no_suplanta_ip_del_atacante():
+    """
+    Un atacante conectado desde su propia IP no puede hacer que el
+    proxy lo registre/reenvíe como otra IP fijando X-Forwarded-For.
+    """
+    fake_runner, hits = await _start_fake_mace(19015)
+    proxy = MaceProxy(
+        target_url  = "http://127.0.0.1:19015",
+        listen_port = 18915,
+    )
+    await proxy.start()
+    await asyncio.sleep(0.1)
+
+    try:
+        async with _attacker_session() as session:
+            await session.get(
+                "http://127.0.0.1:18915/check",
+                headers={"X-Forwarded-For": "8.8.8.8"},
+            )
+    finally:
+        await proxy.stop()
+        await fake_runner.cleanup()
+
+    assert len(hits) == 1
+    assert hits[0]["ip"] == ATTACKER_IP, (
+        f"la IP suplantada 8.8.8.8 se coló en vez de {ATTACKER_IP}: {hits[0]['ip']!r}"
+    )
+
+
+async def t_xff_spoofing_no_evade_bloqueo():
+    """
+    Una IP bloqueada no puede reetiquetarse a sí misma vía
+    X-Forwarded-For para colarse igualmente hasta MACE.
+    """
+    fake_runner, hits = await _start_fake_mace(19016)
+    proxy = MaceProxy(
+        target_url  = "http://127.0.0.1:19016",
+        listen_port = 18916,
+    )
+    await proxy.start()
+    await asyncio.sleep(0.1)
+    proxy.blocklist.block(ATTACKER_IP, ttl_s=60)
+
+    try:
+        async with _attacker_session() as session:
+            async with session.get(
+                "http://127.0.0.1:18916/secret",
+                headers={"X-Forwarded-For": "1.2.3.4"},  # IP no bloqueada
+            ) as resp:
+                assert resp.status == 403
+    finally:
+        await proxy.stop()
+        await fake_runner.cleanup()
+
+    assert len(hits) == 0, "MACE recibió una petición que debía seguir bloqueada"
+
+
+async def t_xff_confiado_solo_desde_proxy_configurado():
+    """
+    Con AEGIS_TRUSTED_PROXIES configurado y el peer dentro de esa
+    lista, X-Forwarded-For sí se respeta (caso de uso legítimo: un
+    reverse proxy propio delante de MaceProxy).
+    """
+    fake_runner, hits = await _start_fake_mace(19017)
+    proxy = MaceProxy(
+        target_url      = "http://127.0.0.1:19017",
+        listen_port     = 18917,
+        trusted_proxies = "127.0.0.1",  # el cliente de test conecta desde aquí
+    )
+    await proxy.start()
+    await asyncio.sleep(0.1)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.get(
+                "http://127.0.0.1:18917/check",
+                headers={"X-Forwarded-For": "203.0.113.5"},
+            )
+    finally:
+        await proxy.stop()
+        await fake_runner.cleanup()
+
+    assert len(hits) == 1
+    assert hits[0]["ip"] == "203.0.113.5", (
+        f"peer confiable pero XFF no respetado: {hits[0]['ip']!r}"
+    )
+
+
+test("XFF — Entradas inválidas en AEGIS_TRUSTED_PROXIES no rompen el arranque",
+     t_parse_trusted_proxies_ignora_entradas_invalidas)
+test("XFF — Sin configurar, ningún peer es confiable",
+     t_peer_is_trusted_sin_config_siempre_false)
+test("XFF — Sin trusted proxy, se usa la IP TCP real (no la XFF falsa)",
+     t_xff_no_confiado_usa_ip_tcp_real)
+test("XFF — Atacante no puede suplantar su IP vía X-Forwarded-For",
+     t_xff_spoofing_no_suplanta_ip_del_atacante)
+test("XFF — IP bloqueada no evade el bloqueo reetiquetándose vía XFF",
+     t_xff_spoofing_no_evade_bloqueo)
+test("XFF — Con proxy confiable configurado, XFF sí se respeta",
+     t_xff_confiado_solo_desde_proxy_configurado)
+
+
+# ─────────────────────────────────────────────
 # BLOQUE 4 — PROXY: BLOQUEO DE IPs
 # ─────────────────────────────────────────────
 
