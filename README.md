@@ -7,7 +7,7 @@
 [![Paper](https://img.shields.io/badge/paper-Zenodo-blue.svg)](https://doi.org/10.5281/zenodo.20274935)
 [![Hacker News](https://img.shields.io/badge/Hacker%20News-Show%20HN-orange)](https://news.ycombinator.com/item?id=48883787)
 
-**AEGIS** is an autonomous, nine-layer post-quantum cyber-defense system deployed in production. It protects network services against modern and quantum-era threats using NIST-standardized post-quantum cryptography, without human intervention.
+**AEGIS** is a nine-layer defense system for a single HTTP service, deployed as a public demo. It watches request patterns (IP, path, port, rate) and temporarily blocks abusive IPs without human intervention. It implements NIST-standardized post-quantum cryptography (ML-KEM-1024, ML-DSA-87, SPHINCS+), verified at startup — see [Post-Quantum Cryptography](#post-quantum-cryptography) below for exactly what that does and does not protect today.
 
 > *"We do not wait for Q-Day. We defend against it today."*
 
@@ -28,7 +28,7 @@ Update (Aug 2026): we found a real production bug in our own test suite, fixed i
 
 The cryptographic infrastructure of the internet (RSA, ECC, Diffie-Hellman) is mathematically broken by quantum computers running Shor's algorithm. The Q-Day, estimated 2030-2033, is not a theory: it is an active geopolitical race between the US, China, and the EU.
 
-AEGIS implements the NIST post-quantum standards (FIPS 203, 204, 205) in a fully autonomous defense stack that adapts, detects, isolates, and learns without requiring a security team.
+AEGIS implements the NIST post-quantum standards (FIPS 203, 204, 205) and runs a threshold-based detection stack that adapts, detects, isolates, and learns without human intervention in the detection loop. Initial threshold tuning and reviewing blocked traffic is still an operator task, not something AEGIS does for you.
 
 ---
 
@@ -36,12 +36,12 @@ AEGIS implements the NIST post-quantum standards (FIPS 203, 204, 205) in a fully
 
 | Situation | AEGIS | Wazuh | Suricata | Falco |
 |-----------|-------|-------|----------|-------|
-| No dedicated security team | ✅ fully autonomous | ❌ requires SIEM ops | ❌ requires rule maintenance | ❌ |
-| Post-quantum / Q-Day readiness | ✅ ML-DSA-87 native | ❌ | ❌ | ❌ |
+| No human in the detection loop | ✅ automatic detect+block | ❌ requires SIEM ops | ❌ requires rule maintenance | ❌ |
+| Post-quantum primitives implemented | ✅ ML-KEM/ML-DSA/SPHINCS+ | ❌ | ❌ | ❌ |
 | Single service protection | ✅ one Python process | ❌ multi-component | ❌ | ❌ |
 | Moving target defense (AMTD) | ✅ C5 built-in | ❌ | ❌ | ❌ |
-| Cryptographic forensic evidence | ✅ C1 signed chain | partial | ❌ | ❌ |
-| ML anomaly detection + learning | ✅ C3+C8 | partial | ❌ | ❌ |
+| Cryptographic forensic evidence | ⚠️ C1 SHA-256 hash chain (not yet ML-DSA signed) | partial | ❌ | ❌ |
+| Threshold-based anomaly detection + heuristic learning | ✅ C3+C8 | partial | ❌ | ❌ |
 | Open source, self-hosted | ✅ GPL v3 | ✅ GPL | ✅ GPL | ✅ Apache |
 | SIEM integration (ELK, Splunk) | ❌ planned | ✅ best-in-class | ✅ | ✅ |
 | Large-scale network (>1 Gbps) | ❌ single process | ✅ | ✅ | ✅ |
@@ -60,7 +60,7 @@ Incoming traffic
        |
   [C0]   Crypto Foundation   -- ML-KEM-1024, ML-DSA-87, SPHINCS+
   [C0.5] Shield              -- Decoy ports, disuasion layer
-  [C1]   Digital Twin        -- Immutable forensic chain, signed jump log
+  [C1]   Digital Twin        -- In-process state replica, SHA-256 hash-chained jump log
   [C2]   Minefield           -- Honeypots, canary tokens
   [C3]   Detector            -- Anomaly detection (fire-and-forget)
          | threat detected
@@ -75,6 +75,8 @@ Incoming traffic
 
 Threat flow: Detection (C3) -> Atomic lockdown (C4) -> Twin jump (C1) -> Forensic (C7) -> Learning (C8)
 
+> **What these layer names actually mean today:** "Digital Twin" (C1) is an in-process state replica (A/B/C/D), not a separate machine or a real quantum simulation. "Atomic isolation" (C4) means the 5 lockdown actions run concurrently via `asyncio.gather()` inside the same process — it does not reconfigure your firewall, Nginx, DNS, or Kubernetes. "Anomaly detection" (C3) is deterministic thresholds (request rate, path/port diversity), not a trained ML model. These are accurate descriptions of internal mechanisms with ambitious names, not infrastructure-level capabilities.
+
 ---
 
 ## Post-Quantum Cryptography
@@ -83,7 +85,9 @@ Threat flow: Detection (C3) -> Atomic lockdown (C4) -> Twin jump (C1) -> Forensi
 |-------------|---------------|---------------------------|
 | ML-KEM-1024 | NIST FIPS 203 | Key encapsulation (Kyber) |
 | ML-DSA-87   | NIST FIPS 204 | Digital signatures        |
-| SPHINCS+    | NIST FIPS 205 | Hash-based signatures     |
+| SPHINCS+    | NIST FIPS 205 | Hash-based signatures (SHA-2 variant: `sphincs_sha2_256s`, not SHA-3) |
+
+**What this protects today, and what it doesn't:** all three primitives are implemented via `pqcrypto` and pass a self-test on startup — key generation, encapsulation, signing, and verification are real and correct. What they do **not** currently do: ML-KEM is not used to protect proxy sessions (the proxy speaks plain HTTP to its upstream); ML-DSA-87 does not sign incidents, forensic reports, or per-event data — the only code path that calls it is the startup self-test. The forensic/incident chain integrity today comes from a SHA-256 hash chain (`core/log_chain.py`), not from ML-DSA signatures. Wiring PQC into the request/forensic path is on the roadmap, not shipped.
 
 Need standalone ML-DSA-87 signing for your own Python project? We spun the signing layer out into [pqsign](https://github.com/pqsign/pqsign) — key rotation and FastAPI/Flask integration included.
 
@@ -95,7 +99,7 @@ Need standalone ML-DSA-87 signing for your own Python project? We spun the signi
 - **Single process** -- pure Python asyncio, no threading, no microservices
 - **Stateless restart** -- clean systemd restart with no undesired persistent state
 - **Minimal surface** -- status API bound to 127.0.0.1 only, never 0.0.0.0
-- **Immutable forensics** -- digital twin jumps are signed and immutable after registration
+- **Tamper-evident forensics** -- digital twin jumps are recorded in a SHA-256 hash chain; any later alteration is detectable (this is hash-chain integrity, not a cryptographic signature)
 
 ---
 
@@ -103,12 +107,12 @@ Need standalone ML-DSA-87 signing for your own Python project? We spun the signi
 
 | Metric             | Result               |
 |--------------------|----------------------|
-| Unit tests         | 611 passing (100%)   |
-| Red team scenarios | 946 / 1,000 (94.6%)  |
-| Security breaches  | **0**                |
-| Known limit (E1)   | Latency >50% at >250 RPS sustained |
+| Unit tests         | 611 passing (100%) — pytest wrappers, several run a full internal script per test, not 611 isolated unit cases |
+| Internal scenario tests | 946 / 1,000 (94.6%)  |
+| Security breaches in those scenarios | **0**                |
+| Known limit (E1)   | latency degrades under sustained high load; exact RPS threshold not currently re-verified against the live proxy |
 
-The 54 E1 failures are latency degradation under extreme load, not security failures. Detection remains functional at any load. This is a documented architectural limit of a single Python async process on a general-purpose VPS.
+The "1,000 scenarios" are internal component-level simulations (`tests/redteam_*.py` instantiate AEGIS classes directly) — not an external red-team engagement or a pentest against the deployed proxy, and they don't open real network connections. The 54 failures are latency degradation under extreme load, not exploitable security issues. We have not re-run a live-traffic RPS benchmark against the proxy recently, so the specific ">250 RPS" figure from earlier testing is not being restated as current.
 
 ---
 
@@ -189,9 +193,9 @@ pytest tests/test_suite.py -v
 
 ## Use Cases
 
-- **API protection**: proxy any HTTP service behind AEGIS; threats are detected and blocked before reaching your service
-- **Compliance evidence**: every incident generates a ML-DSA-87 signed forensic report — tamper-proof audit trail for NIS2, DORA, or ISO 27001
-- **Quantum-safe infrastructure**: replace RSA/ECC signing with NIST FIPS 203/204/205 before Q-Day
+- **API protection**: proxy any HTTP service behind AEGIS; once an IP is flagged, its *future* requests are blocked — detection runs fire-and-forget in the background, so the specific request that triggers a detection is still forwarded upstream
+- **Incident evidence**: every incident generates a JSON/HTML forensic report chained with SHA-256 hashes — a tamper-evident record of what happened, useful as one input into a NIS2/DORA/ISO 27001 evidence trail, not a compliance certification by itself
+- **Quantum-safe cryptography, self-tested**: ML-KEM-1024/ML-DSA-87/SPHINCS+ are implemented and verified at startup, ready to build on ahead of Q-Day — see [Post-Quantum Cryptography](#post-quantum-cryptography) for what's wired into the live path today
 - **SOC augmentation**: deploy AEGIS alongside existing tools; use [ENLIL](https://github.com/conchaestradamiguelangel-droid/enlil) for strategic AI-assisted incident analysis
 
 ---
