@@ -51,6 +51,9 @@ state/
 # Backups de desarrollo
 *.bak
 *.bak_*
+*.bak-*
+*.LIVE_*
+*.PREVIOUS_*
 
 # Scripts de análisis y demo (no forman parte del sistema)
 demo.sh
