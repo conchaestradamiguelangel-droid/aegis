@@ -279,7 +279,7 @@ class IncidentReporter:
                 continue
             score = e.get("abuse_confidence_score", 0)
             color = "#ef4444" if score >= 75 else "#f59e0b" if score >= 25 else "#22c55e"
-            country = e.get("country_code", "?")
+            country = e.get("country_code") or "?"
             isp = (e.get("isp", "") or "---")[:40]
             reports = e.get("total_reports", 0)
             tor_flag = " TOR" if e.get("is_tor") else ""
