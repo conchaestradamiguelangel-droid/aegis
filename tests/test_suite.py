@@ -27,6 +27,7 @@ _CORE_SCRIPTS = [
     "test_mitre_mapper.py",
     "test_abuseipdb_enricher.py",
     "test_status_incidents.py",
+    "test_enlil_connector.py",
 ]
 
 # test_aegis.py es el test principal de integracion (más lento)
@@ -60,3 +61,14 @@ def _run_script(script: str):
         out = (result.stdout or "")[-3000:]
         err = (result.stderr or "")[-500:]
         pytest.fail(f"{script} exited with code {result.returncode}\n\n{out}\n{err}")
+
+
+def test_enlil_bridge_e2e():
+    """E2E AEGIS→ENLIL con ENLIL simulado (mock HTTP local, sin gasto real)."""
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", str(_TESTS_DIR / "test_enlil_bridge_e2e.py"),
+         "-q", "-p", "no:cacheprovider"],
+        capture_output=True, text=True, timeout=120, cwd=str(_TESTS_DIR.parent),
+    )
+    if result.returncode != 0:
+        pytest.fail("test_enlil_bridge_e2e.py falló: " + (result.stdout or "")[-3000:])
