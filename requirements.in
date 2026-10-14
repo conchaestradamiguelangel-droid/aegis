@@ -1,2 +1,2 @@
-aiohttp>=3.14.3
+aiohttp>=3.14.5
 pqcrypto>=0.4.0
